@@ -42,9 +42,12 @@ def record(data_dir: Path, experiment: str, config: dict, result: dict):
               "brogue_revision": "1ba4240b7a928ddf0ffb772717bf1d433cd63804",
               "hardware": platform.platform(), "protocol": 2,
               "observation_schema": 2, "action_schema": 2}
-    status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=normal"],
-                            capture_output=True, text=True)
-    config["worktree_dirty"] = bool(status.stdout.strip()) if status.returncode == 0 else None
+    unstaged = subprocess.run(["git", "diff", "--quiet"], capture_output=True)
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
+    untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"],
+                               capture_output=True, text=True)
+    config["worktree_dirty"] = (bool(unstaged.returncode or staged.returncode or
+                                     untracked.stdout.strip()) if untracked.returncode == 0 else None)
     config["source_tree_sha256"] = source_fingerprint()
     patch = Path("native/patches/0001-yendorlab-stream.patch")
     config["native_patch_sha256"] = hashlib.sha256(patch.read_bytes()).hexdigest() if patch.is_file() else None
