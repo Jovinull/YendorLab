@@ -1,4 +1,10 @@
-# Reproducibility
+# Reproducibility (M0 history and current additions)
+
+For the current CLI use Python 3.11+ in WSL. Run `bash scripts/build-wsl.sh`, `PYTHONPATH=src python3 -m unittest discover -s tests -v`, `bash scripts/test-native-events.sh`, then the bounded commands in [README](../README.md). The native source is fixed at `1ba4240b7a928ddf0ffb772717bf1d433cd63804`; protocol, observation and action schemas are 2, and the Q encoder is 1. The controlled native callback script temporarily builds a test binary and restores production afterward.
+
+`configs/train-smoke.toml` provides explicit bounds. Seed derivation uses domain-separated SHA-256 of master seed, split and episode index for train, validation and final. Keep final seeds unused while tuning. Checkpoints store version, configuration, Q values, counters and validation history. Resume is at episode boundaries: an interrupted episode is discarded. SQLite stores run UUID, UTC, config, hardware, source revision when committed, native patch hash, status and result. Preserve raw artifacts externally with hashes before publishing a result.
+
+`python3 scripts/compare-seed-catalog.py` strictly compares 6,773 catalog body lines after declared CRLF and old-header normalization. The original upstream comparator still fails on this Windows checkout; it is not reported as passing. Determinism evidence remains within the same build/platform.
 
 The native source revision is pinned in `scripts/build-wsl.sh`; the only change is the tracked patch. Build under WSL, run `PYTHONPATH=src python3 -m unittest discover -s tests -v`, then the bounded CLI command in the README. SQLite `data/experiments.sqlite3` records run UUID, UTC time, config and results, including the native patch hash and per-child memory cap. It is ignored by Git. The runner derives game seeds as `--seed + episode index` and policy seeds as `--seed + 100000 + index`. It records per observation SHA-256 values but does not yet record the action sequence; deterministic replay is therefore limited to this versioned random policy.
 

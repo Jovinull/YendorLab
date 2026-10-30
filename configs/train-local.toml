@@ -1,0 +1,16 @@
+[train]
+experiment = "EXP-0011"
+variant = "classic"
+episodes = 100
+total_seconds = 1800.0
+episode_seconds = 30.0
+max_events = 1000
+max_no_progress = 75
+memory_mb = 512
+master_seed = 20261030
+epsilon = 0.2
+alpha = 0.15
+gamma = 0.98
+validation_every = 10
+validation_episodes = 5
+training_task = "exploration_v1"

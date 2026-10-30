@@ -30,10 +30,13 @@ class NativeTests(unittest.TestCase):
                                    stdout=subprocess.PIPE, text=True)
         try:
             observation = json.loads(process.stdout.readline())
-            self.assertEqual(set(observation), {"schema", "seed", "depth", "turn", "x", "y",
-                                                "hp", "max_hp", "ended", "visible"})
+            self.assertEqual(observation["protocol"], 2)
+            self.assertEqual(observation["observation_schema"], 2)
+            self.assertEqual(observation["context"], "gameplay")
             self.assertEqual(observation["seed"], 123)
-            self.assertIn([observation["x"], observation["y"]], observation["visible"])
+            self.assertIn([observation["x"], observation["y"]],
+                          [[cell[0], cell[1]] for cell in observation["cells"]])
+            self.assertNotIn("rng", observation)
         finally:
             process.terminate()
             process.communicate(timeout=2)

@@ -1,4 +1,6 @@
-# Initial interface, schema 1
+# Initial interface, schema 1 (M0 historical contract)
+
+The current schema is **2**, documented below. This section preserves the original M0 contract as historical evidence.
 
 Upstream: Brogue CE `v1.15.1`, commit `1ba4240b7a928ddf0ffb772717bf1d433cd63804`. The patch adds `--yendorlab` to select `nullConsole`. It reads one ASCII action from stdin for each native input callback and writes one JSON observation to stdout. It leaves the game loop, procedural generation, RNG, and combat code unchanged. Each Python `run_episode` starts a fresh process, providing a hard reset and crash isolation at the cost of startup overhead.
 
@@ -7,6 +9,18 @@ An observation includes `schema=1`, game seed, depth, turn, player position, cur
 Action schema 1 accepts `h j k l y u b n` (eight movements), plus `z` rest, `<` ascend, `>` descend and space at native protocol level. The Python random baseline selects only the eight directions. Invalid input becomes `z`. Native callbacks may occur in menus or confirmations; the current protocol has no context marker or action legality mask. Thus one callback is an **input event**, not necessarily one game turn or one strategic decision. The turn field reveals when actions consume no game time. A terminal event contains result, score, depth and turn via Brogue's `notifyEvent` callback. Python status `completed` requires this event; action or time limits yield `truncated`.
 
 The protocol is intentionally below Gymnasium for now. A future `reset/step` wrapper must define menus, action masks, rewards, and `terminated` versus `truncated` before claiming Gymnasium compatibility. Python currently uses only its standard library; NumPy, Gymnasium, PyTorch, and MLflow would add cost without solving the native contract.
+
+## Current native protocol, version 2
+
+The C adapter emits one JSON line before every native input callback: `protocol`, `schema`, `decision`, `context`, `seed`, `turn`, `player`, `cells`, `inventory`, `creatures`, `floor_items`, and `admissible`. `decision` counts input callbacks, not strategic choices. The context is instrumented at the actual input site: `gameplay`, `inventory`, `confirmation`, `acknowledgment`, `text_input`, `death_screen`, or `target_selection`. The Python env sends one key or `ESC`/`ENTER` per callback. Unexpected input is a protocol error. A separate JSON `terminal` line comes from `notifyEvent` and distinguishes death, quit, victory and supervictory. The runner responds to death screen and postgame prompts until the canonical callback arrives, then closes the child. It does not equate process exit with game outcome.
+
+Map `cells` are sparse six-element records `[x, y, visible, glyph, blocked, stairs]` only for cells Brogue marks discovered or visible. Unknown cells have no record. Visible glyphs come through Brogue's appearance function. The blocked flag for visible cells follows the displayed glyph for secret-looking tiles, avoiding a hidden passability leak. Previously known cells represent memory and may be stale. Creatures and floor items are emitted only at visible coordinates. Inventory names use Brogue's player-facing naming routine; item letters are stable within a prompt, but not persistent item IDs. The current representation does not cover all magical detection, hallucination and identification cases. Schema changes require a new version and checkpoint compatibility decision.
+
+`BrogueEnv.reset(seed)` starts a fresh process; `step(action)` returns `(observation, reward, terminated, truncated, info)`. Natural terminal outcomes are `DEATH`, `QUIT`, `VICTORY`, `SUPERVICTORY`. Operational outcomes include `TRUNCATED_ACTION_LIMIT`, `TRUNCATED_TIME_LIMIT`, `TRUNCATED_NO_PROGRESS`, `ENGINE_ERROR`, `PROTOCOL_ERROR`. `info` separates input `events`, policy `decisions` and game `turn`. Limits cover time, event count, no progress and sampled child memory. An event may be a menu selection without consuming a turn. Menu operations are currently exposed as separate decisions; no compound action hides internal events.
+
+Gameplay admissible keys are movement `h j k l y u b n`, rest `z`, stairs `< >`, inventory `i`, apply `a`, equip `e`, remove `r`, and quit `Q`. Item letters, confirmations and targeting are contextual. The list is an interface affordance, not a guarantee the attempted game action succeeds. It intentionally does not reveal unknown traps or items. Throwing, advanced device targeting, all item workflows and strategic action masks remain incomplete. The Q model uses only movement and rest in gameplay; context actions are deterministic. Full-game training is not supported.
+
+Rewards are versioned: `canonical` assigns +1 victory and -1 death, zero otherwise; `exploration_v1` additionally assigns 0.01 per newly discovered cell and +1 per new maximum depth. Resting or revisiting a cell grants no repeat exploration reward. Reward totals are recorded separately from game metrics. `encode_state` version 1 compresses immediate local passability, visible threat, HP bucket and depth. It discards most spatial history and inventory detail, limiting potential generalization.
 
 ### Integrity and limitations
 

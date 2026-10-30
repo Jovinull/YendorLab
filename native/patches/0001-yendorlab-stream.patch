@@ -1,12 +1,130 @@
+diff --git a/src/brogue/IO.c b/src/brogue/IO.c
+index ee7975d..770a266 100644
+--- a/src/brogue/IO.c
++++ b/src/brogue/IO.c
+@@ -535,6 +535,7 @@ static void initializeMenuButtons(buttonState *state, brogueButton buttons[5]) {
+ 
+ // This is basically the main loop for the game.
+ void mainInputLoop() {
++    extern int yendorLabInputContext;
+     pos oldTargetLoc = { 0, 0 };
+     short steps, oldRNG, dir;
+     pos path[1000];
+@@ -695,6 +696,7 @@ void mainInputLoop() {
+ 
+             // Get the input!
+             rogue.playbackMode = playingBack;
++            yendorLabInputContext = 1;
+             doEvent = moveCursor(&targetConfirmed, &canceled, &tabKey, &rogue.cursorLoc, &theEvent, &state, !textDisplayed, rogue.cursorMode, true);
+             rogue.playbackMode = false;
+ 
+@@ -2724,6 +2726,7 @@ boolean getInputTextString(char *inputText,
+                            const char *promptSuffix,
+                            short textEntryType,
+                            boolean useDialogBox) {
++    extern int yendorLabInputContext;
+     short charNum, i, x, y, promptSuffixLen, defaultEntrylengthOverflow;
+     char keystroke, suffix[100];
+     const short textEntryBounds[TEXT_INPUT_TYPES][2] = {{' ', '~'}, {' ', '~'}, {'0', '9'}};
+@@ -2779,6 +2782,7 @@ boolean getInputTextString(char *inputText,
+     do {
+         printString(suffix, charNum + x, y, &gray, &black, 0);
+         plotCharWithColor((suffix[0] ? suffix[0] : ' '), (windowpos){ x + charNum, y }, &black, &white);
++        yendorLabInputContext = 7;
+         keystroke = nextKeyPress(true);
+         if (keystroke == DELETE_KEY && charNum > 0) {
+             printString(suffix, charNum + x - 1, y, &gray, &black, 0);
+@@ -2908,6 +2912,7 @@ void flashTemporaryAlert(char *message, int time) {
+ }
+ 
+ void waitForAcknowledgment() {
++    extern int yendorLabInputContext;
+     rogueEvent theEvent;
+ 
+     if (rogue.autoPlayingLevel || (rogue.playbackMode && !rogue.playbackOOS) || nonInteractivePlayback) {
+@@ -2915,6 +2920,7 @@ void waitForAcknowledgment() {
+     }
+ 
+     do {
++        yendorLabInputContext = 4;
+         nextBrogueEvent(&theEvent, false, false, false);
+         if (theEvent.eventType == KEYSTROKE && theEvent.param1 != ACKNOWLEDGE_KEY && theEvent.param1 != ESCAPE_KEY) {
+             flashTemporaryAlert(" -- Press space or click to continue -- ", 500);
+@@ -2931,6 +2937,7 @@ void waitForKeystrokeOrMouseClick() {
+ }
+ 
+ boolean confirm(char *prompt, boolean alsoDuringPlayback) {
++    extern int yendorLabInputContext;
+     short retVal;
+     brogueButton buttons[2] = {{{0}}};
+ 
+@@ -2960,6 +2967,7 @@ boolean confirm(char *prompt, boolean alsoDuringPlayback) {
+     buttons[1].flags |= (B_WIDE_CLICK_AREA | B_KEYPRESS_HIGHLIGHT);
+ 
+     const SavedDisplayBuffer rbuf = saveDisplayBuffer();
++    yendorLabInputContext = 3;
+     retVal = printTextBox(prompt, COLS/3, ROWS/3, COLS/3, &white, &interfaceBoxColor, buttons, 2);
+     restoreDisplayBuffer(&rbuf);
+ 
+diff --git a/src/brogue/Items.c b/src/brogue/Items.c
+index 6782246..2de67ed 100644
+--- a/src/brogue/Items.c
++++ b/src/brogue/Items.c
+@@ -2772,6 +2772,8 @@ char displayInventory(unsigned short categoryMask,
+                       unsigned long forbiddenFlags,
+                       boolean waitForAcknowledge,
+                       boolean includeButtons) {
++    extern int yendorLabInputContext;
++    yendorLabInputContext = 2;
+     item *theItem;
+     short i, j, m, maxLength = 0, itemNumber, itemCount, equippedItemCount;
+     short extraLineCount = 0;
+@@ -5608,6 +5610,7 @@ boolean chooseTarget(pos *returnLoc,
+                      short maxDistance,
+                      enum autoTargetMode targetMode,
+                      const item *theItem) {
++    extern int yendorLabInputContext;
+     short numCells, i, distance;
+     pos coordinates[DCOLS];
+     creature *monst;
+@@ -5734,6 +5737,7 @@ boolean chooseTarget(pos *returnLoc,
+         }
+ 
+         oldTargetLoc = targetLoc;
++        yendorLabInputContext = 6;
+         moveCursor(&targetConfirmed, &canceled, &tabKey, &targetLoc, &event, NULL, false, true, false);
+         if (event.eventType == RIGHT_MOUSE_UP) { // Right mouse cancels.
+             canceled = true;
+diff --git a/src/brogue/RogueMain.c b/src/brogue/RogueMain.c
+index 93ce8b6..2e2c40f 100644
+--- a/src/brogue/RogueMain.c
++++ b/src/brogue/RogueMain.c
+@@ -1044,6 +1044,7 @@ void freeEverything() {
+ }
+ 
+ void gameOver(char *killedBy, boolean useCustomPhrasing) {
++    extern int yendorLabInputContext;
+     short i, y;
+     char buf[200], highScoreText[200], buf2[200];
+     rogueHighScoresEntry theEntry;
+@@ -1090,6 +1091,7 @@ void gameOver(char *killedBy, boolean useCustomPhrasing) {
+ 
+         do {
+             if (rogue.playbackMode) break;
++            yendorLabInputContext = 5;
+             nextBrogueEvent(&theEvent, false, false, false);
+             if (theEvent.eventType == KEYSTROKE
+                 && theEvent.param1 != ACKNOWLEDGE_KEY
 diff --git a/src/platform/main.c b/src/platform/main.c
-index b50a40e..19b924e 100644
+index b50a40e..e476c1c 100644
 --- a/src/platform/main.c
 +++ b/src/platform/main.c
-@@ -15,10 +15,12 @@ boolean nonInteractivePlayback = false;
+@@ -15,10 +15,13 @@ boolean nonInteractivePlayback = false;
  boolean hasGraphics = false;
  enum graphicsModes graphicsMode = TEXT_GRAPHICS;
  boolean isCsvFormat = false;
 +boolean yendorLabMode = false;
++int yendorLabInputContext = 0;
  
  static void printCommandlineHelp() {
      printf("%s",
@@ -15,10 +133,33 @@ index b50a40e..19b924e 100644
      "--version      -V          print the version and exit\n"
      "--scores                   dump scores to output and exit\n"
      "-n                         start a new game, skipping the menu\n"
-@@ -111,6 +113,11 @@ int main(int argc, char *argv[])
+@@ -78,6 +81,9 @@ boolean tryParseUint64(char *str, uint64_t *num) {
+ 
+ int main(int argc, char *argv[])
+ {
++#ifdef YENDORLAB_TESTING
++    short labTestEvent = -1;
++#endif
+ 
+ #if 0
+ #define TOD(x)  ((double) (x) / FP_FACTOR)
+@@ -111,6 +117,24 @@ int main(int argc, char *argv[])
  
      int i;
      for (i = 1; i < argc; i++) {
++#ifdef YENDORLAB_TESTING
++        if (strcmp(argv[i], "--yendorlab-test-event") == 0 && i + 1 < argc) {
++            const char *name = argv[++i];
++            labTestEvent = !strcmp(name, "victory") ? GAMEOVER_VICTORY :
++                           !strcmp(name, "supervictory") ? GAMEOVER_SUPERVICTORY :
++                           !strcmp(name, "death") ? GAMEOVER_DEATH :
++                           !strcmp(name, "quit") ? GAMEOVER_QUIT : -1;
++            if (labTestEvent < 0) return 2;
++            currentConsole = nullConsole;
++            yendorLabMode = true;
++            continue;
++        }
++#endif
 +        if (strcmp(argv[i], "--yendorlab") == 0) {
 +            currentConsole = nullConsole;
 +            yendorLabMode = true;
@@ -27,29 +168,141 @@ index b50a40e..19b924e 100644
          if (strcmp(argv[i], "--scores") == 0) {
              // just dump the scores and quit!
              dumpScores();
+@@ -350,6 +374,12 @@ int main(int argc, char *argv[])
+     graphicsMode = setGraphicsMode(initialGraphics);
+ 
+     loadKeymap();
++#ifdef YENDORLAB_TESTING
++    if (labTestEvent >= 0) {
++        notifyEvent(labTestEvent, 7, 0, "controlled test", "none");
++        return 0;
++    }
++#endif
+     currentConsole.gameLoop();
+ 
+     return 0;
 diff --git a/src/platform/null-platform.c b/src/platform/null-platform.c
-index 0c2309c..38bfc06 100644
+index 0c2309c..426d1ab 100644
 --- a/src/platform/null-platform.c
 +++ b/src/platform/null-platform.c
-@@ -1,4 +1,25 @@
+@@ -1,4 +1,124 @@
  #include "platform.h"
 +#include "GlobalsBase.h"
 +
 +extern boolean yendorLabMode;
++extern int yendorLabInputContext;
++static unsigned long labDecision = 0;
++
++static void lab_string(const char *value) {
++    putchar('"');
++    for (const unsigned char *p = (const unsigned char *) value; *p; p++) {
++        if (*p == '"' || *p == '\\') {
++            putchar('\\');
++            putchar(*p);
++        } else if (*p < 32) {
++            printf("\\u%04x", *p);
++        } else {
++            putchar(*p);
++        }
++    }
++    putchar('"');
++}
++
++static boolean lab_glyph_blocks(enum displayGlyph glyph) {
++    return glyph == G_WALL || glyph == G_GRANITE || glyph == G_WALL_TOP ||
++           glyph == G_CLOSED_IRON_DOOR || glyph == G_PORTCULLIS;
++}
 +
 +static void lab_observation(void) {
-+    printf("{\"schema\":1,\"seed\":%llu,\"depth\":%d,\"turn\":%lu,\"x\":%d,\"y\":%d,\"hp\":%d,\"max_hp\":%d,\"ended\":%s,\"visible\":[",
++    const char *context = yendorLabInputContext == 1 ? "gameplay" :
++                          yendorLabInputContext == 2 ? "inventory" :
++                          yendorLabInputContext == 3 ? "confirmation" :
++                          yendorLabInputContext == 4 ? "acknowledgment" :
++                          yendorLabInputContext == 5 ? "death_acknowledgment" :
++                          yendorLabInputContext == 6 ? "target_selection" :
++                          yendorLabInputContext == 7 ? "text_input" : "unknown";
++    printf("{\"protocol\":2,\"observation_schema\":2,\"action_schema\":2,\"decision\":%lu,\"context\":\"%s\",\"seed\":%llu,\"depth\":%d,\"turn\":%lu,\"x\":%d,\"y\":%d,\"hp\":%d,\"max_hp\":%d,\"width\":%d,\"height\":%d,\"admissible\":[",
++           ++labDecision, context,
 +           (unsigned long long) rogue.seed, rogue.depthLevel,
 +           (unsigned long) rogue.absoluteTurnNumber, player.loc.x, player.loc.y,
-+           player.currentHP, player.info.maxHP, rogue.gameHasEnded ? "true" : "false");
++           player.currentHP, player.info.maxHP, DCOLS, DROWS);
++    const char *keys = yendorLabInputContext == 1 ? "hjklyubnz<>siaerQ" :
++                       yendorLabInputContext == 2 ? "" :
++                       yendorLabInputContext == 3 ? "yN" :
++                       yendorLabInputContext == 6 ? "hjklyubn" :
++                       yendorLabInputContext == 4 || yendorLabInputContext == 5 ? " " : "";
 +    boolean first = true;
++    for (const char *key = keys; *key; key++) {
++        printf("%s\"%c\"", first ? "" : ",", *key);
++        first = false;
++    }
++    if (yendorLabInputContext == 2) {
++        for (item *it = packItems->nextItem; it; it = it->nextItem) {
++            printf("%s\"%c\"", first ? "" : ",", it->inventoryLetter);
++            first = false;
++        }
++    }
++    if (yendorLabInputContext == 7 || yendorLabInputContext == 2 || yendorLabInputContext == 3 || yendorLabInputContext == 4 || yendorLabInputContext == 5 || yendorLabInputContext == 6) {
++        printf("%s\"ESC\"", first ? "" : ",");
++        first = false;
++    }
++    if (yendorLabInputContext == 7 || yendorLabInputContext == 6) printf("%s\"ENTER\"", first ? "" : ",");
++    printf("],\"cells\":[");
++    first = true;
 +    for (short x = 0; x < DCOLS; x++) {
 +        for (short y = 0; y < DROWS; y++) {
-+            if (playerCanSee(x, y)) {
-+                printf("%s[%d,%d]", first ? "" : ",", x, y);
-+                first = false;
++            boolean visible = playerCanSee(x, y);
++            if (!visible && !(pmap[x][y].flags & (DISCOVERED | MAGIC_MAPPED))) continue;
++            enum displayGlyph glyph = pmap[x][y].rememberedAppearance.character;
++            if (visible) {
++                color foreground, background;
++                getCellAppearance((pos){x, y}, &glyph, &foreground, &background);
 +            }
++            unsigned long knownFlags = pmap[x][y].rememberedTerrainFlags;
++            if (visible) getLocationFlags(x, y, &knownFlags, NULL, NULL, true);
++            boolean blocked = !!(knownFlags & T_OBSTRUCTS_PASSABILITY);
++            if (visible && cellHasTMFlag((pos){x, y}, TM_IS_SECRET)) {
++                blocked = lab_glyph_blocks(glyph);
++            }
++            printf("%s[%d,%d,%d,%d,%d,%d]", first ? "" : ",", x, y,
++                   visible ? 1 : 0, glyph, blocked,
++                   glyph == G_DOWN_STAIRS ? 1 : glyph == G_UP_STAIRS ? -1 : 0);
++            first = false;
 +        }
++    }
++    printf("],\"inventory\":[");
++    first = true;
++    for (item *it = packItems->nextItem; it; it = it->nextItem) {
++        char name[COLS * 5];
++        itemName(it, name, true, false, NULL);
++        printf("%s{\"letter\":\"%c\",\"category\":%u,\"quantity\":%d,\"equipped\":%s,\"name\":",
++               first ? "" : ",", it->inventoryLetter, it->category, it->quantity,
++               it->flags & ITEM_EQUIPPED ? "true" : "false");
++        lab_string(name);
++        putchar('}');
++        first = false;
++    }
++    printf("],\"floor_items\":[");
++    first = true;
++    for (item *it = floorItems->nextItem; it; it = it->nextItem) {
++        if (!playerCanSee(it->loc.x, it->loc.y)) continue;
++        char name[COLS * 5];
++        itemName(it, name, true, false, NULL);
++        printf("%s{\"x\":%d,\"y\":%d,\"name\":", first ? "" : ",", it->loc.x, it->loc.y);
++        lab_string(name);
++        putchar('}');
++        first = false;
++    }
++    printf("],\"creatures\":[");
++    first = true;
++    for (creatureIterator iter = iterateCreatures(monsters); hasNextCreature(iter);) {
++        creature *it = nextCreature(&iter);
++        if (!canSeeMonster(it)) continue;
++        enum displayGlyph glyph;
++        color foreground, background;
++        getCellAppearance(it->loc, &glyph, &foreground, &background);
++        printf("%s[%d,%d,%d]", first ? "" : ",", it->loc.x, it->loc.y, glyph);
++        first = false;
 +    }
 +    puts("]}");
 +    fflush(stdout);
@@ -57,17 +310,24 @@ index 0c2309c..38bfc06 100644
  
  static void null_gameLoop() {
      exit(rogueMain());
-@@ -9,6 +30,18 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
+@@ -9,6 +129,25 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
  }
  
  static void null_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
 +    if (!yendorLabMode) return;
++    (void)textInput;
 +    lab_observation();
 +    char line[32];
-+    if (!fgets(line, sizeof line, stdin)) exit(0);
-+    const char *valid = "hjklyubnz<> ";
-+    char action = line[0];
-+    if (!action || !strchr(valid, action)) action = 'z';
++    if (!fgets(line, sizeof line, stdin)) exit(64);
++    char action = 0;
++    if (!strcmp(line, "ESC\n")) action = ESCAPE_KEY;
++    else if (!strcmp(line, "ENTER\n")) action = RETURN_KEY;
++    else if (line[0] && line[1] == '\n' && strchr("abcdefghijklmnopqrstuvwxyz<> QN", line[0])) action = line[0];
++    if (!action) {
++        fputs("{\"event\":\"protocol_error\",\"reason\":\"invalid_action\"}\n", stdout);
++        fflush(stdout);
++        exit(64);
++    }
 +    returnEvent->eventType = KEYSTROKE;
 +    returnEvent->param1 = action;
 +    returnEvent->param2 = 0;
@@ -76,12 +336,15 @@ index 0c2309c..38bfc06 100644
      return;
  }
  
-@@ -23,6 +56,17 @@ static boolean null_modifier_held(int modifier) {
+@@ -23,6 +162,20 @@ static boolean null_modifier_held(int modifier) {
      return false;
  }
  
 +static void lab_notifyEvent(short eventId, int data1, int data2, const char *str1, const char *str2) {
 +    if (!yendorLabMode) return;
++    if (eventId != GAMEOVER_DEATH && eventId != GAMEOVER_VICTORY &&
++        eventId != GAMEOVER_SUPERVICTORY && eventId != GAMEOVER_QUIT &&
++        eventId != GAMEOVER_RECORDING) return;
 +    const char *result = eventId == GAMEOVER_DEATH ? "death" :
 +                         eventId == GAMEOVER_VICTORY ? "victory" :
 +                         eventId == GAMEOVER_SUPERVICTORY ? "supervictory" :
@@ -94,7 +357,7 @@ index 0c2309c..38bfc06 100644
  struct brogueConsole nullConsole = {
      null_gameLoop,
      null_pauseForMilliseconds,
-@@ -30,7 +74,7 @@ struct brogueConsole nullConsole = {
+@@ -30,7 +183,7 @@ struct brogueConsole nullConsole = {
      null_plotChar,
      NULL,
      null_modifier_held,

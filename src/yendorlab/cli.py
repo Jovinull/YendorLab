@@ -13,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .agents import context_action
+
 try:
     import resource
 except ImportError:  # Windows can inspect metadata but native execution requires WSL.
@@ -72,14 +74,14 @@ def run_episode(binary: Path, seed: int, policy_seed: int, max_actions: int,
                 terminal = record
                 status = "completed"
                 break
-            if record.get("schema") != 1 or record.get("seed") != seed:
+            if record.get("protocol") != 2 or record.get("seed") != seed:
                 raise ValueError("invalid native observation")
             last = record
             hashes.append(hashlib.sha256(line.encode()).hexdigest())
             observations += 1
             if actions >= max_actions:
                 break
-            action = rng.choice(ACTIONS)
+            action = rng.choice(ACTIONS) if record["context"] == "gameplay" else context_action(record)
             process.stdin.write(action + "\n")
             process.stdin.flush()
             actions += 1
@@ -131,8 +133,8 @@ def main() -> None:
     run_id = str(uuid.uuid4())
     config = {"binary": str(binary), "episodes": args.episodes, "max_actions": args.max_actions,
               "max_seconds": args.max_seconds, "seed": args.seed, "variant": args.variant,
-              "workers": 1, "agent": "uniform_random_v1", "observation_schema": 1,
-              "action_schema": 1, "memory_mb_per_child": args.memory_mb}
+              "workers": 1, "agent": "uniform_random_v2", "observation_schema": 2,
+              "action_schema": 2, "memory_mb_per_child": args.memory_mb}
     started_utc = datetime.now(timezone.utc).isoformat()
     config.update({"brogue_revision": BROGUE_REVISION, "yendorlab_revision": git_revision(),
                    "hardware": platform.platform(), "mode": "normal",
