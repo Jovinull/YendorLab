@@ -1,0 +1,16 @@
+name: checks
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build pinned Brogue CE
+        run: bash scripts/build-wsl.sh
+      - name: Compile Python and run short tests
+        run: |
+          python -m compileall -q src tests
+          PYTHONPATH=src python -m unittest discover -s tests -v

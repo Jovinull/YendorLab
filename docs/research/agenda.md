@@ -1,0 +1,9 @@
+# Research agenda, preliminary
+
+1. **CPU efficiency:** With equal wall time and memory, does a compact learned policy outperform a navigation baseline? Variables: algorithm, observation, action mask, seed split, environment throughput. Threats: different implementation overhead, reward proxy exploitation, small sample size.
+2. **Hybrid decisions:** Does learned strategic choice plus deterministic pathfinding improve outcomes over either component alone? Use paired evaluation seeds, independent policy seeds, and report compute cost. Threat: hand-coded planner advantages hidden from the learned policy.
+3. **Curriculum:** Does Bullet or Rapid training transfer to Classic Normal on held-out seeds? Treat variants as distinct environments; do not merge their win rates. Threat: rule and episode length differences.
+4. **Observation:** How does adding audited player-visible terrain, items, inventory and history affect generalization? Threat: accidental hidden-state leak through flags, secret item IDs, or debug observations.
+5. **Action design:** Compare flat parameterized actions with hierarchical/menu-aware actions and explicit masks. Threat: invalid actions may consume callbacks but no turns, biasing throughput and rewards.
+
+Initial methods to investigate: tabular/value methods on local tasks, compact evolutionary policies, policy-gradient methods, imitation if legally usable demonstrations exist, and planner/policy hybrids. Candidate metrics: win rate with Wilson interval, depth distribution with bootstrap uncertainty, truncation rate, actions/s, episodes/s, RSS, and compute to a fixed performance target. Freeze train/validation/final seed generation before tuning. No hypothesis has been tested yet. Related work and provenance are in [sources](sources.md) and [BibTeX](references.bib).

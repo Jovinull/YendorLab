@@ -1,0 +1,3 @@
+# Licensing policy
+
+Brogue CE's `LICENSE.txt` and source headers state AGPL version 3 or later. BrogueBot also distributes AGPL terms. The project uses AGPL-3.0-or-later for its own code and the Brogue patch to keep distribution of the combined executable straightforward. Preserve upstream copyright headers and provide the exact source and patch with any distributed binary. Network deployment of a modified AGPL program can trigger corresponding source obligations. The Python runner communicates over a process pipe; whether a differently licensed independent client could be distributed separately is a fact specific legal question, not settled by this technical design. Before release, review combined distribution and notices. No BrogueBot code was copied.

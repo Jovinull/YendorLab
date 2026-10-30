@@ -1,0 +1,105 @@
+diff --git a/src/platform/main.c b/src/platform/main.c
+index b50a40e..19b924e 100644
+--- a/src/platform/main.c
++++ b/src/platform/main.c
+@@ -15,10 +15,12 @@ boolean nonInteractivePlayback = false;
+ boolean hasGraphics = false;
+ enum graphicsModes graphicsMode = TEXT_GRAPHICS;
+ boolean isCsvFormat = false;
++boolean yendorLabMode = false;
+ 
+ static void printCommandlineHelp() {
+     printf("%s",
+     "--help         -h          print this help message and exit \n"
++    "--yendorlab                  stream restricted JSON observations and read actions on stdin\n"
+     "--version      -V          print the version and exit\n"
+     "--scores                   dump scores to output and exit\n"
+     "-n                         start a new game, skipping the menu\n"
+@@ -111,6 +113,11 @@ int main(int argc, char *argv[])
+ 
+     int i;
+     for (i = 1; i < argc; i++) {
++        if (strcmp(argv[i], "--yendorlab") == 0) {
++            currentConsole = nullConsole;
++            yendorLabMode = true;
++            continue;
++        }
+         if (strcmp(argv[i], "--scores") == 0) {
+             // just dump the scores and quit!
+             dumpScores();
+diff --git a/src/platform/null-platform.c b/src/platform/null-platform.c
+index 0c2309c..38bfc06 100644
+--- a/src/platform/null-platform.c
++++ b/src/platform/null-platform.c
+@@ -1,4 +1,25 @@
+ #include "platform.h"
++#include "GlobalsBase.h"
++
++extern boolean yendorLabMode;
++
++static void lab_observation(void) {
++    printf("{\"schema\":1,\"seed\":%llu,\"depth\":%d,\"turn\":%lu,\"x\":%d,\"y\":%d,\"hp\":%d,\"max_hp\":%d,\"ended\":%s,\"visible\":[",
++           (unsigned long long) rogue.seed, rogue.depthLevel,
++           (unsigned long) rogue.absoluteTurnNumber, player.loc.x, player.loc.y,
++           player.currentHP, player.info.maxHP, rogue.gameHasEnded ? "true" : "false");
++    boolean first = true;
++    for (short x = 0; x < DCOLS; x++) {
++        for (short y = 0; y < DROWS; y++) {
++            if (playerCanSee(x, y)) {
++                printf("%s[%d,%d]", first ? "" : ",", x, y);
++                first = false;
++            }
++        }
++    }
++    puts("]}");
++    fflush(stdout);
++}
+ 
+ static void null_gameLoop() {
+     exit(rogueMain());
+@@ -9,6 +30,18 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
+ }
+ 
+ static void null_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
++    if (!yendorLabMode) return;
++    lab_observation();
++    char line[32];
++    if (!fgets(line, sizeof line, stdin)) exit(0);
++    const char *valid = "hjklyubnz<> ";
++    char action = line[0];
++    if (!action || !strchr(valid, action)) action = 'z';
++    returnEvent->eventType = KEYSTROKE;
++    returnEvent->param1 = action;
++    returnEvent->param2 = 0;
++    returnEvent->shiftKey = false;
++    returnEvent->controlKey = false;
+     return;
+ }
+ 
+@@ -23,6 +56,17 @@ static boolean null_modifier_held(int modifier) {
+     return false;
+ }
+ 
++static void lab_notifyEvent(short eventId, int data1, int data2, const char *str1, const char *str2) {
++    if (!yendorLabMode) return;
++    const char *result = eventId == GAMEOVER_DEATH ? "death" :
++                         eventId == GAMEOVER_VICTORY ? "victory" :
++                         eventId == GAMEOVER_SUPERVICTORY ? "supervictory" :
++                         eventId == GAMEOVER_QUIT ? "quit" : "recording";
++    printf("{\"event\":\"terminal\",\"result\":\"%s\",\"score\":%d,\"depth\":%d,\"turn\":%lu}\n",
++           result, data1, rogue.depthLevel, (unsigned long) rogue.absoluteTurnNumber);
++    fflush(stdout);
++}
++
+ struct brogueConsole nullConsole = {
+     null_gameLoop,
+     null_pauseForMilliseconds,
+@@ -30,7 +74,7 @@ struct brogueConsole nullConsole = {
+     null_plotChar,
+     NULL,
+     null_modifier_held,
+-    NULL,
++    lab_notifyEvent,
+     NULL,
+     NULL
+ };
