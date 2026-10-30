@@ -10,10 +10,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .agents import HeuristicAgent, QAgent, RandomAgent
+from .agents import FixedDirectionAgent, HeuristicAgent, QAgent, RandomAgent
 from .evaluation import run_policy_episode, seed_for, summarize
 from .experiments import list_runs, record, show_run
 from .training import load_policy_checkpoint, train
+from .skill import LinearFrontierAgent, load_skill_checkpoint, train_skill
 
 
 def agent_named(name, seed, checkpoint=None):
@@ -27,6 +28,14 @@ def agent_named(name, seed, checkpoint=None):
         if checkpoint is None:
             raise ValueError("q agent requires --checkpoint")
         return QAgent(load_policy_checkpoint(checkpoint), seed=seed)
+    if name == "linear":
+        if checkpoint is None:
+            raise ValueError("linear agent requires --checkpoint")
+        return LinearFrontierAgent(load_skill_checkpoint(checkpoint)["weights"], seed=seed)
+    if name == "initial_linear":
+        return LinearFrontierAgent(seed=seed)
+    if name == "fixed_k":
+        return FixedDirectionAgent("k")
     raise ValueError(name)
 
 
@@ -48,12 +57,12 @@ def main():
     doctor.add_argument("--binary", type=Path, default=Path(".local/BrogueCE/bin/brogue"))
     play = sub.add_parser("play")
     common(play)
-    play.add_argument("--agent", choices=["random", "heuristic", "initial_q", "q"], default="heuristic")
+    play.add_argument("--agent", choices=["random", "heuristic", "initial_q", "q", "initial_linear", "linear", "fixed_k"], default="heuristic")
     play.add_argument("--checkpoint", type=Path)
     play.add_argument("--seed", type=int, default=123)
     evaluate = sub.add_parser("evaluate")
     common(evaluate)
-    evaluate.add_argument("--agent", choices=["random", "heuristic", "initial_q", "q"], required=True)
+    evaluate.add_argument("--agent", choices=["random", "heuristic", "initial_q", "q", "initial_linear", "linear", "fixed_k"], required=True)
     evaluate.add_argument("--checkpoint", type=Path)
     evaluate.add_argument("--episodes", type=int, default=3)
     evaluate.add_argument("--master-seed", type=int, default=20261030)
@@ -71,6 +80,7 @@ def main():
     training.add_argument("--checkpoint", type=Path, default=Path("data/checkpoints/maia-q.json"))
     training.add_argument("--episodes", type=int)
     training.add_argument("--total-seconds", type=float)
+    training.add_argument("--master-seed", type=int)
     training.add_argument("--resume", action="store_true")
     experiments = sub.add_parser("experiments")
     experiments.add_argument("operation", choices=["list", "show"])
@@ -110,9 +120,13 @@ def main():
             config["episodes"] = args.episodes
         if args.total_seconds is not None:
             config["total_seconds"] = args.total_seconds
+        if args.master_seed is not None:
+            config["master_seed"] = args.master_seed
         if config["episodes"] <= 0 or config["total_seconds"] <= 0:
             parser.error("training limits must be positive")
-        result = train(binary, config, args.checkpoint.resolve(), args.resume)
+        result = (train_skill(binary, config, args.checkpoint.resolve(), args.resume)
+                  if config.get("algorithm") == "linear_frontier_td_v1" else
+                  train(binary, config, args.checkpoint.resolve(), args.resume))
         run_id = record(args.data_dir, config["experiment"], config, result)
         print(json.dumps({"run_id": run_id, **{k: v for k, v in result.items() if k != "episodes"}}))
         return

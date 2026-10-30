@@ -8,6 +8,9 @@ version = "0.1.0"
 requires-python = ">=3.11"
 description = "CPU research laboratory for Brogue Community Edition"
 
+[project.optional-dependencies]
+gym = ["gymnasium==1.2.2"]
+
 [project.scripts]
 yendorlab = "yendorlab.app:main"
 

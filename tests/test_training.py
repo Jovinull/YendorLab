@@ -5,7 +5,7 @@ from pathlib import Path
 
 from yendorlab.agents import QAgent, encode_state
 from yendorlab.evaluation import run_policy_episode, seed_for, wilson
-from yendorlab.training import load_checkpoint, load_policy_checkpoint, save_checkpoint, train
+from yendorlab.training import load_checkpoint, load_policy_checkpoint, save_checkpoint, train, train_episode
 
 
 BINARY = Path('.local/BrogueCE/bin/brogue')
@@ -37,6 +37,14 @@ class TrainingUnitTests(unittest.TestCase):
 
 @unittest.skipUnless(BINARY.is_file(), 'native build absent')
 class TrainingNativeTests(unittest.TestCase):
+    def test_last_valid_truncated_transition_is_updated(self):
+        agent = QAgent(seed=3)
+        result = train_episode(BINARY.resolve(), agent, seed=123, variant='classic',
+                               max_events=1, max_seconds=5, max_no_progress=10,
+                               memory_mb=512, alpha=.2, gamma=.95)
+        self.assertEqual(result['reason'], 'TRUNCATED_ACTION_LIMIT')
+        self.assertEqual(result['updates'], 1)
+
     def test_train_checkpoint_evaluate_and_resume(self):
         config = {'experiment': 'TEST', 'variant': 'classic', 'episodes': 2,
                   'total_seconds': 20.0, 'episode_seconds': 5.0,

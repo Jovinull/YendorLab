@@ -38,6 +38,27 @@ class NativeEnvironmentTests(unittest.TestCase):
             self.assertEqual(obs["turn"], 1)
             self.assertFalse(any(item["name"] == "food" for item in obs["inventory"]))
 
+    def test_equipping_and_removing_starter_weapon(self):
+        with BrogueEnv(BINARY, max_events=12) as env:
+            obs, _ = env.reset(seed=123)
+            self.assertTrue(next(item for item in obs["inventory"] if item["letter"] == "b")["equipped"])
+            obs, _, _, _, _ = env.step("r")
+            self.assertEqual(obs["context"], "inventory")
+            obs, _, _, _, _ = env.step("b")
+            self.assertEqual(obs["turn"], 1)
+            self.assertFalse(next(item for item in obs["inventory"] if item["letter"] == "b")["equipped"])
+            obs, _, _, _, _ = env.step("e")
+            obs, _, _, _, _ = env.step("b")
+            self.assertEqual(obs["turn"], 2)
+            self.assertTrue(next(item for item in obs["inventory"] if item["letter"] == "b")["equipped"])
+
+    def test_gameplay_mask_does_not_depend_on_seed(self):
+        with BrogueEnv(BINARY) as env:
+            first, _ = env.reset(seed=123)
+            second, _ = env.reset(seed=124)
+            self.assertEqual(first["admissible"], second["admissible"])
+            self.assertNotEqual(first["cells"], second["cells"])
+
     def test_rest_does_not_farm_exploration_reward(self):
         with BrogueEnv(BINARY, max_events=10,
                        reward=RewardConfig.named("exploration_v1")) as env:

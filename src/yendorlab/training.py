@@ -77,10 +77,17 @@ def train_episode(binary, agent: QAgent, seed: int, variant: str, max_events: in
             if pending is not None:
                 pending = (pending[0], pending[1], pending[2] + reward)
             if terminated or truncated:
-                if pending is not None and terminated:
-                    changed += agent.update(pending[0], pending[1], pending[2], "", True,
-                                            alpha, gamma)
-                    updates += 1
+                if pending is not None:
+                    # An operational cut is not a game terminal. Bootstrap only
+                    # when the post-action observation is a valid gameplay state.
+                    bootstrappable = (truncated and info["reason"] in
+                                      {"TRUNCATED_ACTION_LIMIT", "TRUNCATED_NO_PROGRESS"}
+                                      and observation["context"] == "gameplay")
+                    if terminated or bootstrappable:
+                        changed += agent.update(pending[0], pending[1], pending[2],
+                                                encode_state(observation) if bootstrappable else "",
+                                                terminated, alpha, gamma)
+                        updates += 1
                 break
         return {"seed": seed, "reason": info["reason"], "events": info["events"],
                 "decisions": decisions, "updates": updates, "changed_updates": changed,

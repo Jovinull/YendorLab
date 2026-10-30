@@ -1,5 +1,8 @@
 # Roadmap (updated 2026-10-30)
 
+- **M4 narrow learning demonstrated:** two independent 30-episode linear policies improved raw discovered-cell counts over their zero-weight initial policy on 16 held-out seeds, with descriptive paired intervals above zero. A fixed-north control explains some, but not all, of the gain; the manual heuristic remains much stronger. See [M4 results](results/m4.md).
+- **Next gate:** replicate with a clean committed revision and larger preregistered seed set, then add robust contextual item/target actions and perception audits. Profile startup from Linux filesystem and decide whether to stage the native binary there. Do not infer Bullet/Rapid/Classic campaign readiness from this task.
+
 - **M1 partial:** protocol v2, context, terrain, inventory, canonical terminal callbacks, real death and quit tests. Live victory and full contextual action/visibility audit remain.
 - **M2 partial:** bounded environment API, seed domains, reward schemes, evaluation, heuristic baseline, SQLite and CPU benchmarks. Gymnasium validator was not run; baseline quality is limited.
 - **M3 initial training pipeline operational:** real Brogue Q updates, atomic checkpoints, inference loading, episode-boundary resume and held-out evaluation. No demonstrated game improvement. See [M1–M3 results](results/m1-m3.md).

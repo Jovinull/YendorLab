@@ -26,6 +26,16 @@ PYTHONPATH=src python3 -m yendorlab.app experiments list
 PYTHONPATH=src python3 -m yendorlab.app train --config configs/train-smoke.toml --episodes 6 --resume
 ```
 
+M4 exploration training and evaluation, bounded to one CPU worker:
+
+```bash
+PYTHONPATH=src python3 -m yendorlab.app train --config configs/train-exploration.toml --checkpoint data/checkpoints/m4-linear-a.json
+PYTHONPATH=src python3 -m yendorlab.app evaluate --agent linear --checkpoint data/checkpoints/m4-linear-a-inference.json --episodes 16 --master-seed 20261031 --split final --max-events 120 --max-seconds 8 --max-no-progress 30 --experiment EXP-0020
+python3 scripts/analyze-m4.py 4d9ebb6d-af70-48aa-af67-51b9044b59f1 32ca48ed-834c-4dcc-a727-a05cd55514a7
+```
+
+The final seed split above was used for the frozen M4 pilot; reuse it only to reproduce that pilot, not to tune a new policy. The task, results and limitations are in [M4 protocol](docs/experiments/m4-exploration.md) and [M4 results](docs/results/m4.md). The optional Gymnasium adapter can be checked in an isolated environment with `PYTHONPATH=src .local/gym-venv/bin/python scripts/check-gym.py` after installing the `gym` extra; it is not required for training.
+
 Resume occurs only at an episode boundary; increase the episode target while keeping other settings fixed. Reserve `--split final` for a frozen protocol. Local SQLite history and checkpoints remain ignored in `data/`. See the [current contract](docs/architecture/initial-interface.md), [M1–M3 results](docs/results/m1-m3.md), and [roadmap](docs/roadmap.md).
 
 ## Project policy

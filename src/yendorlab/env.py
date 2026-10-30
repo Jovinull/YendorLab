@@ -55,6 +55,7 @@ class BrogueEnv:
         self.deadline = 0.0
         self.no_progress = 0
         self.known = set()
+        self.initial_known = 0
         self.max_depth = 0
         self.terminal = None
         self.peak_native_rss_kib = 0
@@ -78,7 +79,7 @@ class BrogueEnv:
 
     def _validate(self, message):
         if message.get("protocol") != 2 or message.get("observation_schema") != 2:
-            raise ValueError("protocol or observation schema mismatch")
+            raise ValueError(f"protocol or observation schema mismatch: {message!r}")
         if message.get("action_schema") != 2 or message.get("decision") != self.events + 1:
             raise ValueError("action schema or decision sequence mismatch")
         if not isinstance(message.get("cells"), list) or not isinstance(message.get("inventory"), list):
@@ -117,10 +118,15 @@ class BrogueEnv:
         self.peak_native_rss_kib = 0
         self.components = {"terminal": 0.0, "exploration": 0.0, "depth": 0.0}
         message = self._read()
+        if message.get("event") == "time_limit":
+            raise TimeoutError("native reset exceeded episode time limit")
+        if message.get("event") == "engine_error":
+            raise RuntimeError(f"native reset failed: {message!r}")
         self._validate(message)
         self.observation = message
         self._sample_rss()
         self._track(message)
+        self.initial_known = len(self.known)
         # Initial knowledge/depth are a baseline, not a step reward.
         self.components = {"terminal": 0.0, "exploration": 0.0, "depth": 0.0}
         return message, {"seed": seed, "variant": self.variant, "reward_scheme": self.reward.name}
@@ -210,6 +216,7 @@ class BrogueEnv:
             self.close()
         info = {"reason": reason, "events": self.events, "turn": self.observation["turn"],
                 "depth": self.observation["depth"], "max_depth": self.max_depth,
+                "new_cells": len(self.known) - self.initial_known,
                 "reward_components": reward_parts, "reward_totals": dict(self.components),
                 "terminal": self.terminal, "native_rss_peak_sampled_kib": self.peak_native_rss_kib}
         return self.observation, sum(reward_parts.values()), terminated, truncated, info

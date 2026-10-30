@@ -1,0 +1,17 @@
+[train]
+experiment = "EXP-0019"
+algorithm = "linear_frontier_td_v1"
+task = "known_map_exploration_v1"
+variant = "classic"
+episodes = 30
+total_seconds = 180.0
+episode_seconds = 8.0
+max_events = 120
+max_no_progress = 30
+memory_mb = 512
+master_seed = 20261031
+epsilon = 0.25
+alpha = 0.02
+gamma = 0.95
+validation_every = 10
+validation_episodes = 5

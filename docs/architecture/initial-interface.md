@@ -20,7 +20,15 @@ Map `cells` are sparse six-element records `[x, y, visible, glyph, blocked, stai
 
 Gameplay admissible keys are movement `h j k l y u b n`, rest `z`, stairs `< >`, inventory `i`, apply `a`, equip `e`, remove `r`, and quit `Q`. Item letters, confirmations and targeting are contextual. The list is an interface affordance, not a guarantee the attempted game action succeeds. It intentionally does not reveal unknown traps or items. Throwing, advanced device targeting, all item workflows and strategic action masks remain incomplete. The Q model uses only movement and rest in gameplay; context actions are deterministic. Full-game training is not supported.
 
-Rewards are versioned: `canonical` assigns +1 victory and -1 death, zero otherwise; `exploration_v1` additionally assigns 0.01 per newly discovered cell and +1 per new maximum depth. Resting or revisiting a cell grants no repeat exploration reward. Reward totals are recorded separately from game metrics. `encode_state` version 1 compresses immediate local passability, visible threat, HP bucket and depth. It discards most spatial history and inventory detail, limiting potential generalization.
+Rewards are versioned: `canonical` assigns +1 victory and -1 death, zero otherwise; `exploration_v1` additionally assigns 0.01 per newly discovered cell and +1 per new maximum depth. Resting or revisiting a cell grants no repeat exploration reward. Reward totals are recorded separately from game metrics. `encode_state` version 1 compresses immediate local passability, visible threat and HP bucket. It discards most spatial history and inventory detail, limiting potential generalization.
+
+## M4 exploration adapter and feature version 2
+
+The canonical `BrogueEnv` still steps one native event. Its `info.new_cells` counts newly discovered `(depth,x,y)` cells after reset independently of reward settings. Evaluation also records action counts, stalled moves, reset time, policy time, step time, event count, gameplay decisions, turns and sampled child RSS. Reset or protocol failures become explicit error episodes in evaluation rather than vanishing from denominators.
+
+The optional `GymExplorationEnv` is a scoped logical movement adapter. It exposes `Discrete(8)` movement actions and a `Box(128,)` float observation containing eight 16-element player-visible action feature vectors. It automatically acknowledges only safe non-gameplay prompts; `info.events_in_step` and `info.turns_in_step` retain native costs. It is unsuitable for full-game item/target decisions. Gymnasium 1.2.2 `check_env()` passed with this adapter. The raw protocol remains authoritative for auditing. Version 1 tabular checkpoints remain loadable by their original code; new linear checkpoints require feature encoder version 2 and reject incompatible schemas.
+
+The new 16-weight linear policy uses a local map, visible creatures, known-cell frontier routing, within-episode visit counts and action direction. It cannot infer an undiscovered stair or trap. Its training task rewards `10 × newly discovered-cell reward + terminal reward`; raw `new_cells` is the primary independent metric. The detailed protocol is [M4 exploration](../experiments/m4-exploration.md).
 
 ### Integrity and limitations
 

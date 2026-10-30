@@ -41,6 +41,19 @@ class RandomAgent:
         return self.rng.choice(GAME_ACTIONS)
 
 
+class FixedDirectionAgent:
+    """Diagnostic control: one direction in gameplay, safe contextual routing."""
+    name = "fixed_direction_v1"
+
+    def __init__(self, action):
+        if action not in DIRECTIONS:
+            raise ValueError("invalid fixed direction")
+        self.action = action
+
+    def act(self, observation):
+        return self.action if observation["context"] == "gameplay" else context_action(observation)
+
+
 class HeuristicAgent:
     name = "frontier_v1"
 
