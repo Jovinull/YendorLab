@@ -42,7 +42,9 @@ def record(data_dir: Path, experiment: str, config: dict, result: dict):
               "brogue_revision": "1ba4240b7a928ddf0ffb772717bf1d433cd63804",
               "hardware": platform.platform(), "protocol": 2,
               "observation_schema": 2, "action_schema": 2}
-    unstaged = subprocess.run(["git", "diff", "--quiet"], capture_output=True)
+    # The Windows checkout is CRLF; WSL Git needs the same normalization.
+    unstaged = subprocess.run(["git", "-c", "core.autocrlf=true", "diff", "--quiet"],
+                              capture_output=True)
     staged = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
     untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"],
                                capture_output=True, text=True)
