@@ -131,4 +131,4 @@ Selection on 40 validation seeds. Three training runs. The planner feature embed
 
 ## Protocol changes
 
-None yet.
+- 2026-11-03, budget fixed by the rule (EXP-0025, 32 diagnostic seeds): `frontier_moves_v2` reached 1,163.2 cells at 1,000 decisions and 961.4 at 250, the first multiple of 50 above 80%. **The budget of `exploration_v2_floor` and `exploration_v2_relay` is 250 decisions.**
