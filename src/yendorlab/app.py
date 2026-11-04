@@ -127,7 +127,7 @@ def main():
         result = (train_skill(binary, config, args.checkpoint.resolve(), args.resume)
                   if config.get("algorithm") == "linear_frontier_td_v1" else
                   train(binary, config, args.checkpoint.resolve(), args.resume))
-        run_id = record(args.data_dir, config["experiment"], config, result)
+        run_id = record(args.data_dir, config["experiment"], config, result, binary)
         print(json.dumps({"run_id": run_id, **{k: v for k, v in result.items() if k != "episodes"}}))
         return
 
@@ -136,7 +136,7 @@ def main():
         episode = run_policy_episode(binary, agent, args.seed, args.variant, "canonical",
                                      args.max_events, args.max_seconds, args.max_no_progress, args.memory_mb)
         run_id = record(args.data_dir, "EXP-0008", {"agent": args.agent, "seed": args.seed,
-                                                    "variant": args.variant}, episode)
+                                                    "variant": args.variant}, episode, binary)
         print(json.dumps({"run_id": run_id, **episode}))
         return
 
@@ -169,7 +169,7 @@ def main():
                      "checkpoint": str(args.checkpoint) if args.command != "benchmark" and args.checkpoint else None,
                      "checkpoint_sha256": hashlib.sha256(args.checkpoint.read_bytes()).hexdigest()
                      if args.command != "benchmark" and args.checkpoint else None},
-                    result)
+                    result, binary)
     print(json.dumps({"run_id": run_id, **{k: v for k, v in result.items() if k != "episodes"}}))
 
 

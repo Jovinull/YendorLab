@@ -19,3 +19,12 @@ for expected in ('victory', 'supervictory', 'death', 'quit'):
     assert event['event'] == 'terminal' and event['result'] == expected
     print(expected, event['score'])
 PY
+PYTHONPATH=src python3 scripts/test-native-perception.py
+restore
+trap - EXIT
+# The privileged channel must not exist in a production binary.
+if grep -q "yendorlab-test" .local/BrogueCE/bin/brogue; then
+  echo "production binary contains test-only code" >&2
+  exit 1
+fi
+echo "PRODUCTION_ISOLATION_PASS"

@@ -1,5 +1,6 @@
 """Episode-boundary tabular Q-learning on real Brogue observations."""
 
+import copy
 import hashlib
 import json
 import os
@@ -9,11 +10,13 @@ import time
 from pathlib import Path
 
 from .agents import GAME_ACTIONS, QAgent, context_action, encode_state
-from .env import BrogueEnv, RewardConfig
+from .env import BrogueEnv, OPERATIONAL_REASONS, RewardConfig
 from .evaluation import run_policy_episode, seed_for
 
 
 CHECKPOINT_VERSION = 1
+LOADABLE_OBSERVATION_SCHEMAS = {2, 3}
+MAX_EPISODE_RETRIES = 2
 
 
 def save_checkpoint(path: Path, checkpoint: dict):
@@ -32,7 +35,8 @@ def load_checkpoint(path: Path):
     data = json.loads(path.read_text())
     if data.get("checkpoint_version") != CHECKPOINT_VERSION:
         raise ValueError("checkpoint version mismatch")
-    if data.get("observation_schema") != 2 or data.get("action_schema") != 2:
+    if (data.get("observation_schema") not in LOADABLE_OBSERVATION_SCHEMAS
+            or data.get("action_schema") != 2):
         raise ValueError("checkpoint schema mismatch")
     if data.get("encoder_version") != 1:
         raise ValueError("encoder version mismatch")
@@ -44,7 +48,8 @@ def load_checkpoint(path: Path):
 def load_policy_checkpoint(path: Path):
     data = json.loads(path.read_text())
     if data.get("checkpoint_kind") == "inference":
-        if data.get("observation_schema") != 2 or data.get("action_schema") != 2 or data.get("encoder_version") != 1:
+        if (data.get("observation_schema") not in LOADABLE_OBSERVATION_SCHEMAS
+                or data.get("action_schema") != 2 or data.get("encoder_version") != 1):
             raise ValueError("inference checkpoint schema mismatch")
         return data["q"]
     return load_checkpoint(path)["q"]
@@ -55,7 +60,12 @@ def train_episode(binary, agent: QAgent, seed: int, variant: str, max_events: in
                   alpha: float, gamma: float):
     with BrogueEnv(binary, variant, max_events, max_seconds, max_no_progress,
                    memory_mb, RewardConfig.named("exploration_v1")) as env:
-        observation, _ = env.reset(seed=seed)
+        try:
+            observation, _ = env.reset(seed=seed)
+        except (TimeoutError, RuntimeError, ValueError, OSError) as exc:
+            return {"seed": seed, "reason": "RESET_ERROR", "error": repr(exc), "events": 0,
+                    "decisions": 0, "updates": 0, "changed_updates": 0, "turn": 0,
+                    "max_depth": None, "reward": None, "reward_components": {}}
         pending = None
         updates = changed = decisions = 0
         total_reward = 0.0
@@ -112,22 +122,36 @@ def train(binary: Path, config: dict, checkpoint_path: Path, resume: bool = Fals
                       "experiment": config["experiment"], "config": config,
                       "episodes_completed": 0, "updates": 0, "changed_updates": 0,
                       "q": {}, "validation": [], "best_validation_reward": None,
+                      "operational_failures": [],
                       "seed_rule": "sha256(yendorlab-v1:master:train:index)"}
         save_checkpoint(checkpoint_path, checkpoint)
+    checkpoint.setdefault("operational_failures", [])
     episodes = []
     limit = time.monotonic() + config["total_seconds"]
-    interrupted = False
+    interrupted = failed = False
     try:
         for index in range(checkpoint["episodes_completed"], config["episodes"]):
             if time.monotonic() >= limit:
                 break
             seed = seed_for(config["master_seed"], "train", index)
-            agent = QAgent(checkpoint["q"], seed_for(config["master_seed"], "train", index + 1000000),
-                           epsilon=config["epsilon"])
-            episode = train_episode(binary, agent, seed, config["variant"], config["max_events"],
-                                    min(config["episode_seconds"], max(.1, limit - time.monotonic())),
-                                    config["max_no_progress"], config["memory_mb"],
-                                    config["alpha"], config["gamma"])
+            for attempt in range(MAX_EPISODE_RETRIES + 1):
+                # The working copy keeps a failed episode out of the committed table.
+                agent = QAgent(copy.deepcopy(checkpoint["q"]),
+                               seed_for(config["master_seed"], "train", index + 1000000),
+                               epsilon=config["epsilon"])
+                episode = train_episode(binary, agent, seed, config["variant"], config["max_events"],
+                                        min(config["episode_seconds"], max(.1, limit - time.monotonic())),
+                                        config["max_no_progress"], config["memory_mb"],
+                                        config["alpha"], config["gamma"])
+                if episode["reason"] not in OPERATIONAL_REASONS:
+                    break
+                checkpoint["operational_failures"].append(
+                    {"episode_index": index, "attempt": attempt, "seed": seed,
+                     "reason": episode["reason"], "error": episode.get("error")})
+                save_checkpoint(checkpoint_path, checkpoint)
+            else:
+                failed = True
+                break
             episodes.append(episode)
             checkpoint["episodes_completed"] = index + 1
             checkpoint["updates"] += episode["updates"]
@@ -137,21 +161,27 @@ def train(binary: Path, config: dict, checkpoint_path: Path, resume: bool = Fals
             if (checkpoint["episodes_completed"] % config.get("validation_every", 2) == 0
                     and time.monotonic() < limit):
                 scores = []
+                invalid = 0
                 for validation_index in range(config.get("validation_episodes", 1)):
                     if time.monotonic() >= limit:
                         break
                     validation_seed = seed_for(config["master_seed"], "validation", validation_index)
                     validator = QAgent(checkpoint["q"], validation_seed)
-                    scores.append(run_policy_episode(binary, validator, validation_seed,
-                                                     config["variant"], "exploration_v1",
-                                                     config["max_events"],
-                                                     min(config["episode_seconds"], max(.1, limit - time.monotonic())),
-                                                     config["max_no_progress"], config["memory_mb"])["reward"])
+                    outcome = run_policy_episode(binary, validator, validation_seed,
+                                                 config["variant"], "exploration_v1",
+                                                 config["max_events"],
+                                                 min(config["episode_seconds"], max(.1, limit - time.monotonic())),
+                                                 config["max_no_progress"], config["memory_mb"])
+                    if outcome["valid"]:
+                        scores.append(outcome["reward"])
+                    else:
+                        invalid += 1
                 if not scores:
                     continue
                 score = sum(scores) / len(scores)
                 checkpoint["validation"].append({"episodes_completed": index + 1,
-                                                 "mean_reward": score, "sample": len(scores)})
+                                                 "mean_reward": score, "sample": len(scores),
+                                                 "invalid": invalid})
                 if checkpoint["best_validation_reward"] is None or score > checkpoint["best_validation_reward"]:
                     checkpoint["best_validation_reward"] = score
                     save_checkpoint(checkpoint_path.with_name(checkpoint_path.stem + "-best.json"), checkpoint)
@@ -166,7 +196,7 @@ def train(binary: Path, config: dict, checkpoint_path: Path, resume: bool = Fals
         "algorithm": "tabular_q_v1", "observation_schema": 2,
         "action_schema": 2, "encoder_version": 1, "q": checkpoint["q"],
         "source_training_sha256": training_checksum})
-    return {"status": "INTERRUPTED" if interrupted else "COMPLETED" if checkpoint["episodes_completed"] >= config["episodes"] else "INCONCLUSIVE",
+    return {"status": "INTERRUPTED" if interrupted else "FAILED_OPERATIONAL" if failed else "COMPLETED" if checkpoint["episodes_completed"] >= config["episodes"] else "INCONCLUSIVE",
             "episodes_this_run": len(episodes), "episodes_total": checkpoint["episodes_completed"],
             "updates_total": checkpoint["updates"], "changed_updates_total": checkpoint["changed_updates"],
             "q_states": len(checkpoint["q"]), "duration_s": time.monotonic() - start,
@@ -177,4 +207,5 @@ def train(binary: Path, config: dict, checkpoint_path: Path, resume: bool = Fals
             "best_validation_reward": checkpoint["best_validation_reward"],
             "validation": checkpoint["validation"],
             "checkpoint_sha256": training_checksum,
+            "operational_failures": checkpoint["operational_failures"],
             "episodes": episodes}

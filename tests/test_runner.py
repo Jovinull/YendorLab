@@ -26,12 +26,12 @@ class NativeTests(unittest.TestCase):
     def test_observation_excludes_internal_state(self):
         binary = Path(".local/BrogueCE/bin/brogue").resolve()
         process = subprocess.Popen([str(binary), "--yendorlab", "-n", "-s", "123"],
-                                   cwd=binary.parent, stdin=subprocess.PIPE,
+                                   cwd=tempfile.gettempdir(), stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE, text=True)
         try:
             observation = json.loads(process.stdout.readline())
-            self.assertEqual(observation["protocol"], 2)
-            self.assertEqual(observation["observation_schema"], 2)
+            self.assertEqual(observation["protocol"], 3)
+            self.assertEqual(observation["observation_schema"], 3)
             self.assertEqual(observation["context"], "gameplay")
             self.assertEqual(observation["seed"], 123)
             self.assertIn([observation["x"], observation["y"]],

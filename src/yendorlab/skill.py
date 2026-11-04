@@ -9,7 +9,7 @@ from collections import deque
 from pathlib import Path
 
 from .agents import DIRECTIONS, context_action
-from .env import BrogueEnv, RewardConfig
+from .env import BrogueEnv, OPERATIONAL_REASONS, OBSERVATION_SCHEMA, RewardConfig
 from .evaluation import run_policy_episode, seed_for
 from .training import save_checkpoint
 
@@ -18,6 +18,9 @@ ALGORITHM = "linear_frontier_td_v1"
 ENCODER_VERSION = 2
 ACTIONS = tuple(DIRECTIONS)
 FEATURE_COUNT = 16
+# Schema 3 keeps the map cell and creature fields that these features read.
+LOADABLE_OBSERVATION_SCHEMAS = {2, 3}
+MAX_EPISODE_RETRIES = 2
 
 
 def frontier_action(observation):
@@ -118,7 +121,8 @@ class LinearFrontierAgent:
 def load_skill_checkpoint(path: Path, training=False):
     data = json.loads(path.read_text())
     if (data.get("algorithm") != ALGORITHM or data.get("encoder_version") != ENCODER_VERSION
-            or data.get("observation_schema") != 2 or data.get("action_schema") != 2):
+            or data.get("observation_schema") not in LOADABLE_OBSERVATION_SCHEMAS
+            or data.get("action_schema") != 2):
         raise ValueError("skill checkpoint is incompatible")
     if training and data.get("kind") != "training":
         raise ValueError("resume requires a training checkpoint")
@@ -130,7 +134,12 @@ def skill_episode(binary, agent, seed, config):
     with BrogueEnv(binary, config["variant"], config["max_events"],
                    config["episode_seconds"], config["max_no_progress"],
                    config["memory_mb"], RewardConfig.named("exploration_v1")) as env:
-        observation, _ = env.reset(seed=seed)
+        try:
+            observation, _ = env.reset(seed=seed)
+        except (TimeoutError, RuntimeError, ValueError, OSError) as exc:
+            return {"seed": seed, "reason": "RESET_ERROR", "error": repr(exc), "events": 0,
+                    "decisions": 0, "turn": 0, "new_cells": None, "updates": 0,
+                    "changed_updates": 0, "native_rss_peak_sampled_kib": 0}
         previous = None
         reward_sum = 0.0
         changed = updates = decisions = 0
@@ -178,25 +187,38 @@ def train_skill(binary: Path, config: dict, checkpoint_path: Path, resume=False)
         checkpoint["config"] = config
     else:
         checkpoint = {"kind": "training", "algorithm": ALGORITHM,
-                      "encoder_version": ENCODER_VERSION, "observation_schema": 2,
+                      "encoder_version": ENCODER_VERSION, "observation_schema": OBSERVATION_SCHEMA,
                       "action_schema": 2, "config": config, "weights": [0.0] * FEATURE_COUNT,
                       "episodes_completed": 0, "updates": 0, "changed_updates": 0,
-                      "validation": []}
+                      "validation": [], "operational_failures": []}
         save_checkpoint(checkpoint_path, checkpoint)
+    checkpoint.setdefault("operational_failures", [])
     episodes = []
     deadline = start + config["total_seconds"]
-    interrupted = False
+    interrupted = failed = False
     try:
         for index in range(checkpoint["episodes_completed"], config["episodes"]):
             if time.monotonic() >= deadline:
                 break
-            agent = LinearFrontierAgent(checkpoint["weights"],
-                                        seed_for(config["master_seed"], "train", index + 1000000),
-                                        config["epsilon"])
             seed = seed_for(config["master_seed"], "train", index)
-            episode_config = {**config, "episode_seconds": min(config["episode_seconds"],
-                              max(0.1, deadline - time.monotonic()))}
-            episode = skill_episode(binary, agent, seed, episode_config)
+            for attempt in range(MAX_EPISODE_RETRIES + 1):
+                # An operational failure leaves no learning state behind: each
+                # attempt starts from the committed weights and the same RNG.
+                agent = LinearFrontierAgent(checkpoint["weights"],
+                                            seed_for(config["master_seed"], "train", index + 1000000),
+                                            config["epsilon"])
+                episode_config = {**config, "episode_seconds": min(config["episode_seconds"],
+                                  max(0.1, deadline - time.monotonic()))}
+                episode = skill_episode(binary, agent, seed, episode_config)
+                if episode["reason"] not in OPERATIONAL_REASONS:
+                    break
+                checkpoint["operational_failures"].append(
+                    {"episode_index": index, "attempt": attempt, "seed": seed,
+                     "reason": episode["reason"], "error": episode.get("error")})
+                save_checkpoint(checkpoint_path, checkpoint)
+            else:
+                failed = True
+                break
             episodes.append(episode)
             checkpoint["episodes_completed"] = index + 1
             checkpoint["updates"] += episode["updates"]
@@ -205,17 +227,23 @@ def train_skill(binary: Path, config: dict, checkpoint_path: Path, resume=False)
             save_checkpoint(checkpoint_path, checkpoint)
             if (index + 1) % config["validation_every"] == 0 and time.monotonic() < deadline:
                 values = []
+                invalid = 0
                 for j in range(config["validation_episodes"]):
                     if time.monotonic() >= deadline:
                         break
                     validation_seed = seed_for(config["master_seed"], "validation", j)
                     policy = LinearFrontierAgent(checkpoint["weights"], validation_seed)
-                    values.append(run_policy_episode(binary, policy, validation_seed,
+                    outcome = run_policy_episode(binary, policy, validation_seed,
                                   config["variant"], "canonical", config["max_events"],
                                   min(config["episode_seconds"], max(0.1, deadline - time.monotonic())),
                                   config["max_no_progress"],
-                                  config["memory_mb"])["new_cells"])
+                                  config["memory_mb"])
+                    if outcome["valid"]:
+                        values.append(outcome["new_cells"])
+                    else:
+                        invalid += 1
                 checkpoint["validation"].append({"episodes": index + 1, "sample": len(values),
+                                                 "invalid": invalid,
                                                  "mean_new_cells": sum(values) / len(values) if values else None})
                 save_checkpoint(checkpoint_path, checkpoint)
     except KeyboardInterrupt:
@@ -225,9 +253,9 @@ def train_skill(binary: Path, config: dict, checkpoint_path: Path, resume=False)
     inference = checkpoint_path.with_name(checkpoint_path.stem + "-inference.json")
     inference_hash = save_checkpoint(inference, {
         "kind": "inference", "algorithm": ALGORITHM, "encoder_version": ENCODER_VERSION,
-        "observation_schema": 2, "action_schema": 2, "weights": checkpoint["weights"],
+        "observation_schema": OBSERVATION_SCHEMA, "action_schema": 2, "weights": checkpoint["weights"],
         "source_training_sha256": training_hash})
-    return {"status": "INTERRUPTED" if interrupted else
+    return {"status": "INTERRUPTED" if interrupted else "FAILED_OPERATIONAL" if failed else
             "COMPLETED" if checkpoint["episodes_completed"] == config["episodes"] else "INCONCLUSIVE",
             "episodes_this_run": len(episodes), "episodes_total": checkpoint["episodes_completed"],
             "updates_total": checkpoint["updates"], "changed_updates_total": checkpoint["changed_updates"],
@@ -235,4 +263,5 @@ def train_skill(binary: Path, config: dict, checkpoint_path: Path, resume=False)
             "checkpoint_sha256": training_hash, "inference_checkpoint": str(inference),
             "inference_checkpoint_sha256": inference_hash,
             "weights": checkpoint["weights"], "validation": checkpoint["validation"],
+            "operational_failures": checkpoint["operational_failures"],
             "episodes": episodes}

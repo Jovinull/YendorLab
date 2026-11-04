@@ -116,7 +116,7 @@ index 93ce8b6..2e2c40f 100644
              if (theEvent.eventType == KEYSTROKE
                  && theEvent.param1 != ACKNOWLEDGE_KEY
 diff --git a/src/platform/main.c b/src/platform/main.c
-index b50a40e..e476c1c 100644
+index b50a40e..f1d8cbd 100644
 --- a/src/platform/main.c
 +++ b/src/platform/main.c
 @@ -15,10 +15,13 @@ boolean nonInteractivePlayback = false;
@@ -133,21 +133,26 @@ index b50a40e..e476c1c 100644
      "--version      -V          print the version and exit\n"
      "--scores                   dump scores to output and exit\n"
      "-n                         start a new game, skipping the menu\n"
-@@ -78,6 +81,9 @@ boolean tryParseUint64(char *str, uint64_t *num) {
+@@ -78,6 +81,10 @@ boolean tryParseUint64(char *str, uint64_t *num) {
  
  int main(int argc, char *argv[])
  {
 +#ifdef YENDORLAB_TESTING
++    extern const char *yendorLabTestScenario;
 +    short labTestEvent = -1;
 +#endif
  
  #if 0
  #define TOD(x)  ((double) (x) / FP_FACTOR)
-@@ -111,6 +117,24 @@ int main(int argc, char *argv[])
+@@ -111,6 +118,28 @@ int main(int argc, char *argv[])
  
      int i;
      for (i = 1; i < argc; i++) {
 +#ifdef YENDORLAB_TESTING
++        if (strcmp(argv[i], "--yendorlab-test-scenario") == 0 && i + 1 < argc) {
++            yendorLabTestScenario = argv[++i];
++            continue;
++        }
 +        if (strcmp(argv[i], "--yendorlab-test-event") == 0 && i + 1 < argc) {
 +            const char *name = argv[++i];
 +            labTestEvent = !strcmp(name, "victory") ? GAMEOVER_VICTORY :
@@ -168,7 +173,7 @@ index b50a40e..e476c1c 100644
          if (strcmp(argv[i], "--scores") == 0) {
              // just dump the scores and quit!
              dumpScores();
-@@ -350,6 +374,12 @@ int main(int argc, char *argv[])
+@@ -350,6 +379,12 @@ int main(int argc, char *argv[])
      graphicsMode = setGraphicsMode(initialGraphics);
  
      loadKeymap();
@@ -182,10 +187,10 @@ index b50a40e..e476c1c 100644
  
      return 0;
 diff --git a/src/platform/null-platform.c b/src/platform/null-platform.c
-index 0c2309c..426d1ab 100644
+index 0c2309c..36f736b 100644
 --- a/src/platform/null-platform.c
 +++ b/src/platform/null-platform.c
-@@ -1,4 +1,124 @@
+@@ -1,4 +1,246 @@
  #include "platform.h"
 +#include "GlobalsBase.h"
 +
@@ -213,7 +218,126 @@ index 0c2309c..426d1ab 100644
 +           glyph == G_CLOSED_IRON_DOOR || glyph == G_PORTCULLIS;
 +}
 +
++#ifdef YENDORLAB_TESTING
++#include "Globals.h"
++const char *yendorLabTestScenario = NULL;
++
++static void lab_scenario_once(void) {
++    static boolean done = false;
++    if (done || !yendorLabTestScenario) return;
++    done = true;
++    if (!strncmp(yendorLabTestScenario, "deep_", 5)) {
++        // Secret doors and hidden traps do not exist on depth 1.
++        while (rogue.depthLevel < 8) {
++            rogue.depthLevel++;
++            startLevel(rogue.depthLevel - 1, 1);
++            rogue.deepestLevel = rogue.depthLevel;
++        }
++    }
++    if (!strcmp(yendorLabTestScenario, "items")) {
++        // Real item flows: the test drives apply/select through the normal UI.
++        const short scrolls[] = {SCROLL_MAGIC_MAPPING};
++        const short potions[] = {POTION_TELEPATHY, POTION_HALLUCINATION, POTION_DARKNESS, POTION_DETECT_MAGIC};
++        for (unsigned i = 0; i < sizeof scrolls / sizeof scrolls[0]; i++) {
++            item *it = generateItem(SCROLL, scrolls[i]);
++            identify(it);
++            addItemToPack(it);
++        }
++        for (unsigned i = 0; i < sizeof potions / sizeof potions[0]; i++) {
++            item *it = generateItem(POTION, potions[i]);
++            identify(it);
++            addItemToPack(it);
++        }
++        // A visible floor item, so the hallucination check cannot pass vacuously.
++        item *bait = generateItem(SCROLL, SCROLL_ENCHANTING);
++        for (short dir = 0; dir < 8; dir++) {
++            pos loc = {player.loc.x + nbDirs[dir][0], player.loc.y + nbDirs[dir][1]};
++            if (!cellHasTerrainFlag(loc, T_OBSTRUCTS_PASSABILITY) && !(pmapAt(loc)->flags & HAS_ITEM)) {
++                placeItemAt(bait, loc);
++                break;
++            }
++        }
++    } else if (!strcmp(yendorLabTestScenario, "perturb_hidden")
++               || !strcmp(yendorLabTestScenario, "deep_perturb_hidden")) {
++        // Same apparent world, different hidden truth: unseen item identity,
++        // unseen creature state, secret doors and hidden traps.
++        for (item *it = floorItems->nextItem; it; it = it->nextItem) {
++            if (!playerCanSee(it->loc.x, it->loc.y)) {
++                it->quantity += 1;
++                it->enchant1 += 3;
++                it->flags ^= ITEM_CURSED;
++            }
++        }
++        for (creatureIterator iter = iterateCreatures(monsters); hasNextCreature(iter);) {
++            creature *monst = nextCreature(&iter);
++            if (!canSeeMonster(monst)) monst->currentHP = 1;
++        }
++        for (short x = 0; x < DCOLS; x++) {
++            for (short y = 0; y < DROWS; y++) {
++                for (short layer = 0; layer < NUMBER_TERRAIN_LAYERS; layer++) {
++                    short tile = pmap[x][y].layers[layer];
++                    if (!(tileCatalog[tile].mechFlags & TM_IS_SECRET)) continue;
++                    if (tile == SECRET_DOOR || tile == WALL_LEVER_HIDDEN) pmap[x][y].layers[layer] = WALL;
++                    else pmap[x][y].layers[layer] = layer == DUNGEON ? FLOOR : NOTHING;
++                }
++            }
++        }
++    }
++}
++
++static void lab_truth(void) {
++    FILE *out = stderr;
++    fprintf(out, "{\"decision\":%lu,\"hallucinating\":%d,\"telepathic\":%d,\"darkened\":%d,\"known\":[",
++            labDecision, player.status[STATUS_HALLUCINATING], player.status[STATUS_TELEPATHIC],
++            player.status[STATUS_DARKNESS]);
++    boolean first = true;
++    for (short x = 0; x < DCOLS; x++) {
++        for (short y = 0; y < DROWS; y++) {
++            if (playerCanSee(x, y) || (pmap[x][y].flags & (DISCOVERED | MAGIC_MAPPED))) {
++                fprintf(out, "%s[%d,%d]", first ? "" : ",", x, y);
++                first = false;
++            }
++        }
++    }
++    fputs("],\"monsters\":[", out);
++    first = true;
++    for (creatureIterator iter = iterateCreatures(monsters); hasNextCreature(iter);) {
++        creature *monst = nextCreature(&iter);
++        fprintf(out, "%s[%d,%d,%d]", first ? "" : ",", monst->loc.x, monst->loc.y, canSeeMonster(monst) ? 1 : 0);
++        first = false;
++    }
++    fputs("],\"items\":[", out);
++    first = true;
++    for (item *it = floorItems->nextItem; it; it = it->nextItem) {
++        char name[COLS * 5];
++        itemName(it, name, true, false, NULL);
++        for (char *p = name; *p; p++) {
++            if (*p == 34 || *p == 92) *p = 39;
++        }
++        fprintf(out, "%s{\"x\":%d,\"y\":%d,\"seen\":%d,\"name\":\"%s\"}", first ? "" : ",",
++                it->loc.x, it->loc.y, playerCanSee(it->loc.x, it->loc.y) ? 1 : 0, name);
++        first = false;
++    }
++    fputs("],\"secrets\":[", out);
++    first = true;
++    for (short x = 0; x < DCOLS; x++) {
++        for (short y = 0; y < DROWS; y++) {
++            if (cellHasTMFlag((pos){x, y}, TM_IS_SECRET)) {
++                fprintf(out, "%s[%d,%d,%d]", first ? "" : ",", x, y,
++                        cellHasTerrainFlag((pos){x, y}, T_OBSTRUCTS_PASSABILITY) ? 1 : 0);
++                first = false;
++            }
++        }
++    }
++    fputs("]}\n", out);
++    fflush(out);
++}
++#endif
++
 +static void lab_observation(void) {
++#ifdef YENDORLAB_TESTING
++    lab_scenario_once();
++#endif
 +    const char *context = yendorLabInputContext == 1 ? "gameplay" :
 +                          yendorLabInputContext == 2 ? "inventory" :
 +                          yendorLabInputContext == 3 ? "confirmation" :
@@ -221,7 +345,7 @@ index 0c2309c..426d1ab 100644
 +                          yendorLabInputContext == 5 ? "death_acknowledgment" :
 +                          yendorLabInputContext == 6 ? "target_selection" :
 +                          yendorLabInputContext == 7 ? "text_input" : "unknown";
-+    printf("{\"protocol\":2,\"observation_schema\":2,\"action_schema\":2,\"decision\":%lu,\"context\":\"%s\",\"seed\":%llu,\"depth\":%d,\"turn\":%lu,\"x\":%d,\"y\":%d,\"hp\":%d,\"max_hp\":%d,\"width\":%d,\"height\":%d,\"admissible\":[",
++    printf("{\"protocol\":3,\"observation_schema\":3,\"action_schema\":2,\"decision\":%lu,\"context\":\"%s\",\"seed\":%llu,\"depth\":%d,\"turn\":%lu,\"x\":%d,\"y\":%d,\"hp\":%d,\"max_hp\":%d,\"width\":%d,\"height\":%d,\"admissible\":[",
 +           ++labDecision, context,
 +           (unsigned long long) rogue.seed, rogue.depthLevel,
 +           (unsigned long) rogue.absoluteTurnNumber, player.loc.x, player.loc.y,
@@ -254,7 +378,7 @@ index 0c2309c..426d1ab 100644
 +            boolean visible = playerCanSee(x, y);
 +            if (!visible && !(pmap[x][y].flags & (DISCOVERED | MAGIC_MAPPED))) continue;
 +            enum displayGlyph glyph = pmap[x][y].rememberedAppearance.character;
-+            if (visible) {
++            if (visible || !(pmap[x][y].flags & STABLE_MEMORY)) {
 +                color foreground, background;
 +                getCellAppearance((pos){x, y}, &glyph, &foreground, &background);
 +            }
@@ -287,7 +411,7 @@ index 0c2309c..426d1ab 100644
 +    for (item *it = floorItems->nextItem; it; it = it->nextItem) {
 +        if (!playerCanSee(it->loc.x, it->loc.y)) continue;
 +        char name[COLS * 5];
-+        itemName(it, name, true, false, NULL);
++        describedItemName(it, name, COLS * 5 - 1);
 +        printf("%s{\"x\":%d,\"y\":%d,\"name\":", first ? "" : ",", it->loc.x, it->loc.y);
 +        lab_string(name);
 +        putchar('}');
@@ -306,11 +430,14 @@ index 0c2309c..426d1ab 100644
 +    }
 +    puts("]}");
 +    fflush(stdout);
++#ifdef YENDORLAB_TESTING
++    if (yendorLabTestScenario) lab_truth();
++#endif
 +}
  
  static void null_gameLoop() {
      exit(rogueMain());
-@@ -9,6 +129,25 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
+@@ -9,6 +251,25 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
  }
  
  static void null_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
@@ -336,7 +463,7 @@ index 0c2309c..426d1ab 100644
      return;
  }
  
-@@ -23,6 +162,20 @@ static boolean null_modifier_held(int modifier) {
+@@ -23,6 +284,20 @@ static boolean null_modifier_held(int modifier) {
      return false;
  }
  
@@ -357,7 +484,7 @@ index 0c2309c..426d1ab 100644
  struct brogueConsole nullConsole = {
      null_gameLoop,
      null_pauseForMilliseconds,
-@@ -30,7 +183,7 @@ struct brogueConsole nullConsole = {
+@@ -30,7 +305,7 @@ struct brogueConsole nullConsole = {
      null_plotChar,
      NULL,
      null_modifier_held,

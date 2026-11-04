@@ -8,12 +8,14 @@ import random
 import select
 import sqlite3
 import subprocess
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .agents import context_action
+from .env import runtime_root
 
 try:
     import resource
@@ -46,7 +48,8 @@ def run_episode(binary: Path, seed: int, policy_seed: int, max_actions: int,
     def limit_child_memory() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
 
-    process = subprocess.Popen(command, cwd=binary.parent, stdin=subprocess.PIPE,
+    workdir = tempfile.TemporaryDirectory(prefix="yendorlab-", dir=runtime_root())
+    process = subprocess.Popen(command, cwd=workdir.name, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, bufsize=1, preexec_fn=limit_child_memory)
     actions = 0
@@ -74,7 +77,7 @@ def run_episode(binary: Path, seed: int, policy_seed: int, max_actions: int,
                 terminal = record
                 status = "completed"
                 break
-            if record.get("protocol") != 2 or record.get("seed") != seed:
+            if record.get("protocol") != 3 or record.get("seed") != seed:
                 raise ValueError("invalid native observation")
             last = record
             hashes.append(hashlib.sha256(line.encode()).hexdigest())
@@ -97,6 +100,7 @@ def run_episode(binary: Path, seed: int, policy_seed: int, max_actions: int,
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
+    workdir.cleanup()
     elapsed = time.monotonic() - started
     return {"seed": seed, "policy_seed": policy_seed, "status": status,
             "result": terminal["result"] if terminal else None,
