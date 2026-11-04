@@ -189,6 +189,56 @@ def pilot(args):
         for encoder in ("rel_v3", "abs_v2", "ego_patch_v1"):
             for run in range(3):
                 print(write_config(f"td-{encoder}-r{run}", encoder=encoder, run=run))
+    if args.name == "hp":
+        for alpha, gamma in ((.02, .95), (.1, .95), (.05, .9), (.05, .98)):
+            for run in (0, 1):
+                print(write_config(f"hp-a{alpha}-g{gamma}-r{run}", experiment="EXP-0027", alpha=alpha,
+                                   gamma=gamma, run=run))
+    if args.name == "ablation":
+        variants = {"dir": {"encoder": "rel_v3_dir"}, "novisits": {"disabled": ["visits"]},
+                    "nofrontier": {"disabled": ["frontier"]}, "nofailed": {"disabled": ["failed"]},
+                    "shaped": {"reward": "cells_shaped_v2"}}
+        for label, overrides in variants.items():
+            for run in range(3):
+                print(write_config(f"abl-{label}-r{run}", experiment="EXP-0030", run=run, **overrides))
+    if args.name == "warm":
+        for label, disabled in (("rel_full", []), ("rel_no_planner", ["frontier"])):
+            for run in range(3):
+                model = json.loads((OUT / f"bc/{label}-r{run}.json").read_text())
+                scaled = OUT / f"bc/scaled-{label}-r{run}.json"
+                scaled.write_text(json.dumps({"weights": [w * model["scale"] for w in model["weights"]]}))
+                print(write_config(f"warm-{label}-r{run}", experiment="EXP-0029", run=run, disabled=disabled,
+                                   init=str(scaled), epsilon_start=.1, epsilon_end=.02, alpha=.02))
+
+
+def assess(args):
+    """Best and latest checkpoints of each campaign on the validation set."""
+    task = task_named("exploration_v2_floor", 250)
+    pairs = seed_pairs(M5_MASTER, "validation", args.count)
+    output = {}
+    for directory in sorted(Path(args.root).iterdir()):
+        if not (directory / "manifest.json").is_file() or not directory.name.startswith(tuple(args.prefix)):
+            continue
+        settings = json.loads((directory / "manifest.json").read_text())["identity"]["config"]["train"]
+        entry = {}
+        for checkpoint in ("best", "latest"):
+            path = directory / f"checkpoints/{checkpoint}.json"
+            if not path.is_file():
+                continue
+            spec = {"kind": "linear", "encoder": settings["encoder"], "disabled": settings.get("disabled", []),
+                    "checkpoint": str(path)}
+            result = evaluate(args.binary, spec, task, pairs, args.workers)
+            entry[checkpoint] = {"summary": result["summary"], "by_seed": by_seed(result)}
+        output[directory.name] = entry
+        print(directory.name, {k: (round(v["summary"]["mean_new_cells"], 1), v["summary"]["invalid"],
+                                   round(v["summary"]["stalled_rate"], 3)) for k, v in entry.items()}, flush=True)
+    existing = OUT / "assess.json"
+    merged = json.loads(existing.read_text()) if existing.is_file() else {}
+    merged.update(output)
+    existing.write_text(json.dumps(merged))
+
+
+def launch(args):
 
 
 def launch(args):
@@ -228,6 +278,10 @@ def main():
     item.add_argument("--split-label", default="validation")
     item = sub.add_parser("pilot")
     item.add_argument("name")
+    item = sub.add_parser("assess")
+    item.add_argument("prefix", nargs="+")
+    item.add_argument("--count", type=int, default=40)
+    item.add_argument("--root", default="data/m5/campaigns")
     item = sub.add_parser("launch")
     item.add_argument("configs", nargs="+")
     item.add_argument("--parallel", type=int, default=4)
@@ -235,7 +289,7 @@ def main():
     args = parser.parse_args()
     args.binary = args.binary.resolve()
     {"m4audit": m4audit, "anisotropy": anisotropy, "budget": budget, "controls": control_suite,
-     "launch": launch, "pilot": pilot}[args.command](args)
+     "launch": launch, "pilot": pilot, "assess": assess}[args.command](args)
 
 
 if __name__ == "__main__":
