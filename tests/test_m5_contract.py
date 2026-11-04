@@ -9,7 +9,8 @@ from yendorlab.benchmark import controls, evaluate, seed_pairs
 from yendorlab.encoders import Encoder
 from yendorlab.env import BrogueEnv
 from yendorlab.evaluation import failed_episode, seed_for, summarize
-from yendorlab.learners import REWARDS, TDTrainer, imitation_metrics, train_softmax
+from yendorlab.learners import (REWARDS, TDTrainer, imitation_metrics, mlp_metrics, train_mlp,
+                                train_softmax)
 from yendorlab.policies import FrontierMoves, LinearPolicy, RandomMoves, build_policy
 from yendorlab.stats import holm, hierarchical_interval, paired_comparison
 from yendorlab.tasks import (MOVES, OFFSETS, SPLITS, Perception, m5_seed, metric_summary,
@@ -203,6 +204,23 @@ class ImitationTests(unittest.TestCase):
         weights, history = train_softmax(samples, "k", 2, epochs=8, rate=.3)
         self.assertLess(history[-1], history[0])
         self.assertEqual(imitation_metrics(weights, samples, "k")["set_accuracy"], 1.0)
+
+
+    def test_tiny_mlp_learns_an_interaction_a_linear_scorer_cannot(self):
+        # Prefer move 0 when exactly one of two context bits is set (XOR over a shared scorer).
+        samples = []
+        for first in (0, 1):
+            for second in (0, 1):
+                context = [(2, 1.0)] * first + [(3, 1.0)] * second
+                wanted = 0 if first != second else 1
+                per_move = [[(0, 1.0)] + context, [(1, 1.0)] + context] + [[(4, 1.0)]] * 6
+                samples.extend({"moves": [wanted], "features": {"k": per_move}} for _ in range(6))
+        linear, _ = train_softmax(samples, "k", 5, epochs=40, rate=.3)
+        self.assertLessEqual(imitation_metrics(linear, samples, "k")["set_accuracy"], .76)
+        model, _ = train_mlp(samples, "k", 5, hidden=8, epochs=60, rate=.1, seed=2)
+        self.assertEqual(mlp_metrics(model, samples, "k")["set_accuracy"], 1.0)
+        again, _ = train_mlp(samples, "k", 5, hidden=8, epochs=60, rate=.1, seed=2)
+        self.assertEqual(model.to_dict(), again.to_dict())
 
 
 class FailureAccounting(unittest.TestCase):

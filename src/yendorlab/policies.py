@@ -137,6 +137,22 @@ class LinearPolicy(Policy):
         return action
 
 
+class MLPPolicy(Policy):
+    """Greedy scorer over a small imitation network; ties break by RNG."""
+    name = "tiny_mlp_v1"
+
+    def __init__(self, encoder, model, seed=0):
+        self.encoder = encoder
+        self.model = model
+        self.rng = random.Random(seed)
+
+    def decide(self, observation, view):
+        encoded = self.encoder(view)
+        scores = [(self.model.score(encoded[move]), move) for move in MOVES]
+        best = max(scores)[0]
+        return self.rng.choice([move for score, move in scores if score == best])
+
+
 def checkpoint_weights(path):
     return json.loads(Path(path).read_text())["weights"]
 
@@ -163,6 +179,10 @@ def build_policy(spec, seed):
         if weights is None and spec.get("checkpoint"):
             weights = checkpoint_weights(spec["checkpoint"])
         return LinearPolicy(encoder, weights, seed)
+    if kind == "mlp":
+        from .learners import TinyMLP
+        return MLPPolicy(Encoder(spec["encoder"], spec.get("disabled", ())), TinyMLP.from_dict(
+            json.loads(Path(spec["checkpoint"]).read_text())["model"]), seed)
     raise ValueError(f"unknown policy kind: {kind}")
 
 

@@ -209,6 +209,14 @@ def pilot(args):
                 scaled.write_text(json.dumps({"weights": [w * model["scale"] for w in model["weights"]]}))
                 print(write_config(f"warm-{label}-r{run}", experiment="EXP-0029", run=run, disabled=disabled,
                                    init=str(scaled), epsilon_start=.1, epsilon_end=.02, alpha=.02))
+    if args.name == "stage2":
+        for label, disabled, scaled in (("base", ["frontier"], True), ("novisits", ["frontier", "visits"], True),
+                                        ("cold", ["frontier"], False)):
+            for run in range(3):
+                extra = {"init": f"data/m5/bc/scaled-rel_no_planner-r{run}.json"} if scaled else {}
+                print(write_config(f"stage2-{label}-r{run}", experiment="EXP-0032", run=run, disabled=disabled,
+                                   episodes=400, gamma=.98, alpha=.02, epsilon_start=.1 if scaled else .3,
+                                   epsilon_end=.02, epsilon_decay_episodes=300, validation_every=50, **extra))
 
 
 def assess(args):

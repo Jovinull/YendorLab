@@ -178,3 +178,90 @@ def scale_to_returns(weights, samples, key, returns):
         numerator += score * value
         denominator += score * score
     return numerator / denominator if denominator else 1.0
+
+
+class TinyMLP:
+    """One hidden tanh layer shared across moves. Pure Python, so kept deliberately small."""
+
+    def __init__(self, inputs, hidden, seed=0):
+        rng = random.Random(seed)
+        self.hidden = hidden
+        self.input_weights = [[rng.gauss(0.0, 0.1) for _ in range(hidden)] for _ in range(inputs)]
+        self.bias = [rng.gauss(0.0, 0.1) for _ in range(hidden)]
+        self.output = [rng.gauss(0.0, 0.1) for _ in range(hidden)]
+
+    def activations(self, features):
+        values = list(self.bias)
+        for index, value in features:
+            row = self.input_weights[index]
+            for unit in range(self.hidden):
+                values[unit] += value * row[unit]
+        return [math.tanh(value) for value in values]
+
+    def score(self, features):
+        return sum(weight * unit for weight, unit in zip(self.output, self.activations(features)))
+
+    def to_dict(self):
+        return {"hidden": self.hidden, "input_weights": self.input_weights, "bias": self.bias,
+                "output": self.output}
+
+    @classmethod
+    def from_dict(cls, data):
+        model = cls.__new__(cls)
+        model.hidden = data["hidden"]
+        model.input_weights = data["input_weights"]
+        model.bias = data["bias"]
+        model.output = data["output"]
+        return model
+
+
+def train_mlp(samples, key, inputs, hidden=24, epochs=12, rate=0.03, seed=0):
+    """Adagrad on the same set-target cross-entropy as the linear model."""
+    model = TinyMLP(inputs, hidden, seed)
+    rng = random.Random(seed + 1)
+    squares_input = [[1e-8] * hidden for _ in range(inputs)]
+    squares_bias, squares_output = [1e-8] * hidden, [1e-8] * hidden
+    order = list(range(len(samples)))
+    history = []
+    for _ in range(epochs):
+        rng.shuffle(order)
+        total = 0.0
+        for position in order:
+            sample = samples[position]
+            per_move = sample["features"][key]
+            states = [model.activations(features) for features in per_move]
+            scores = [sum(w * a for w, a in zip(model.output, state)) for state in states]
+            top = max(scores)
+            exponentials = [math.exp(max(score - top, -40.0)) for score in scores]
+            normalizer = sum(exponentials)
+            probabilities = [value / normalizer for value in exponentials]
+            optimal = sample["moves"]
+            share = 1.0 / len(optimal)
+            total -= share * sum(math.log(max(probabilities[move], 1e-12)) for move in optimal)
+            for move, features in enumerate(per_move):
+                error = probabilities[move] - (share if move in optimal else 0.0)
+                state = states[move]
+                for unit in range(hidden):
+                    activation = state[unit]
+                    gradient = error * activation
+                    squares_output[unit] += gradient * gradient
+                    model.output[unit] -= rate * gradient / math.sqrt(squares_output[unit])
+                    slope = error * model.output[unit] * (1.0 - activation * activation)
+                    squares_bias[unit] += slope * slope
+                    model.bias[unit] -= rate * slope / math.sqrt(squares_bias[unit])
+                    for index, value in features:
+                        step = slope * value
+                        squares_input[index][unit] += step * step
+                        model.input_weights[index][unit] -= rate * step / math.sqrt(squares_input[index][unit])
+        history.append(total / max(1, len(samples)))
+    return model, history
+
+
+def mlp_metrics(model, samples, key):
+    agree = 0.0
+    for sample in samples:
+        scores = [model.score(features) for features in sample["features"][key]]
+        best = max(scores)
+        tied = [move for move, score in enumerate(scores) if score == best]
+        agree += sum(move in sample["moves"] for move in tied) / len(tied)
+    return {"samples": len(samples), "set_accuracy": agree / max(1, len(samples))}
