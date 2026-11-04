@@ -187,7 +187,7 @@ index b50a40e..f1d8cbd 100644
  
      return 0;
 diff --git a/src/platform/null-platform.c b/src/platform/null-platform.c
-index 0c2309c..990a2a2 100644
+index 0c2309c..115abe3 100644
 --- a/src/platform/null-platform.c
 +++ b/src/platform/null-platform.c
 @@ -1,4 +1,246 @@
@@ -437,7 +437,7 @@ index 0c2309c..990a2a2 100644
  
  static void null_gameLoop() {
      exit(rogueMain());
-@@ -9,6 +251,28 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
+@@ -9,6 +251,30 @@ static boolean null_pauseForMilliseconds(short milliseconds, PauseBehavior behav
  }
  
  static void null_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
@@ -445,7 +445,9 @@ index 0c2309c..990a2a2 100644
 +    (void)textInput;
 +    // Upstream flushes the recording only on turn ends, so a long run of turnless
 +    // inputs would overflow it and print a diagnostic into the observation stream.
-+    if (locationInRecordingBuffer >= INPUT_RECORD_BUFFER) flushBufferToFile();
++    // Flush only between commands: a prompt may still cancel the keystroke that opened
++    // it, and cancelKeystroke underflows the buffer position if that key already left.
++    if (yendorLabInputContext == 1 && locationInRecordingBuffer >= INPUT_RECORD_BUFFER) flushBufferToFile();
 +    lab_observation();
 +    char line[32];
 +    if (!fgets(line, sizeof line, stdin)) exit(64);
@@ -466,7 +468,7 @@ index 0c2309c..990a2a2 100644
      return;
  }
  
-@@ -23,6 +287,20 @@ static boolean null_modifier_held(int modifier) {
+@@ -23,6 +289,20 @@ static boolean null_modifier_held(int modifier) {
      return false;
  }
  
@@ -487,7 +489,7 @@ index 0c2309c..990a2a2 100644
  struct brogueConsole nullConsole = {
      null_gameLoop,
      null_pauseForMilliseconds,
-@@ -30,7 +308,7 @@ struct brogueConsole nullConsole = {
+@@ -30,7 +310,7 @@ struct brogueConsole nullConsole = {
      null_plotChar,
      NULL,
      null_modifier_held,

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from yendorlab.benchmark import controls, evaluate, seed_pairs
 from yendorlab.encoders import Encoder
+from yendorlab.env import BrogueEnv
 from yendorlab.evaluation import failed_episode, seed_for, summarize
 from yendorlab.learners import REWARDS, TDTrainer, imitation_metrics, train_softmax
 from yendorlab.policies import FrontierMoves, LinearPolicy, RandomMoves, build_policy
@@ -306,6 +307,17 @@ class NativeTaskTests(unittest.TestCase):
         result = run_episode(self.binary, build_policy({"kind": "fixed", "action": "b"}, 1), 123, task)
         self.assertEqual(result["reason"], "TASK_BUDGET")
         self.assertEqual(result["decisions"], 1500)
+
+    def test_declined_prompt_after_recording_flush_does_not_hang(self):
+        # A real training sequence. Flushing the recording while a prompt was open let
+        # the decline underflow the buffer position and spin forever writing to disk.
+        fixture = json.loads(Path("tests/fixtures/prompt-after-recording-flush.json").read_text())
+        with BrogueEnv(self.binary, max_events=len(fixture["keys"]) + 5, max_seconds=15,
+                       max_no_progress=10000) as env:
+            env.reset(seed=fixture["seed"])
+            for key in fixture["keys"]:
+                _, _, terminated, truncated, info = env.step(key)
+                self.assertFalse(terminated or truncated, info["reason"])
 
     def test_policy_exception_is_a_policy_error_not_a_result(self):
         class Broken(RandomMoves):

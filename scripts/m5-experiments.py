@@ -155,6 +155,42 @@ def control_suite(args):
     print("run", run)
 
 
+def write_config(name, **overrides):
+    """Pilot configs are generated here, so this file versions them."""
+    train = {"experiment": "EXP-0027", "algorithm": "linear_td_v2", "task": "exploration_v2_floor",
+             "budget": 250, "encoder": "rel_v3", "disabled": [], "reward": "cells_v2",
+             "master_seed": M5_MASTER, "run": 0, "episodes": 200, "alpha": .05, "gamma": .95,
+             "epsilon_start": .3, "epsilon_end": .05, "epsilon_decay_episodes": 150,
+             "validation_every": 50, "validation_episodes": 16, "checkpoint_every": 5,
+             "periodic_checkpoint_every": 50, "keep_periodic": 8,
+             "validation_baseline": "data/m5/validation-baseline-random.json"}
+    train.update(overrides)
+    limits = {"episode_seconds": 120.0, "memory_mb": 512, "max_seconds": 1800, "max_rss_mb": 1024,
+              "validation_workers": 1}
+
+    def value(item):
+        if isinstance(item, str):
+            return json.dumps(item)
+        if isinstance(item, list):
+            return json.dumps(item)
+        return repr(item)
+
+    lines = ["[train]"] + [f"{key} = {value(item)}" for key, item in train.items()]
+    lines += ["", "[limits]"] + [f"{key} = {value(item)}" for key, item in limits.items()]
+    path = OUT / "configs" / f"{name}.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def pilot(args):
+    """Write the config matrix of one experiment and print the paths."""
+    if args.name == "td":
+        for encoder in ("rel_v3", "abs_v2", "ego_patch_v1"):
+            for run in range(3):
+                print(write_config(f"td-{encoder}-r{run}", encoder=encoder, run=run))
+
+
 def launch(args):
     """Run a list of campaign configs with a bounded number of concurrent processes."""
     configs = [Path(path) for path in args.configs]
@@ -190,6 +226,8 @@ def main():
     item.add_argument("--budget", type=int, required=True)
     item.add_argument("--count", type=int, default=40)
     item.add_argument("--split-label", default="validation")
+    item = sub.add_parser("pilot")
+    item.add_argument("name")
     item = sub.add_parser("launch")
     item.add_argument("configs", nargs="+")
     item.add_argument("--parallel", type=int, default=4)
@@ -197,7 +235,7 @@ def main():
     args = parser.parse_args()
     args.binary = args.binary.resolve()
     {"m4audit": m4audit, "anisotropy": anisotropy, "budget": budget, "controls": control_suite,
-     "launch": launch}[args.command](args)
+     "launch": launch, "pilot": pilot}[args.command](args)
 
 
 if __name__ == "__main__":

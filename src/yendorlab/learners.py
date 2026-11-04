@@ -86,7 +86,7 @@ class DemoRecorder:
 
     def __call__(self, view, action):
         moves = self.teacher.choices(view)
-        self.samples.append({"moves": moves,
+        self.samples.append({"moves": moves, "known": len(view.cells),
                              "features": {encoder.name + ":" + ",".join(encoder.disabled):
                                           [encoder(view)[move] for move in MOVES]
                                           for encoder in self.encoders}})

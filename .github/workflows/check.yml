@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -10,9 +11,13 @@ jobs:
           python-version: '3.12'
       - name: Build pinned Brogue CE
         run: bash scripts/build-wsl.sh
-      - name: Compile Python and run short tests
+      - name: Compile Python and run tests without long training
         run: |
-          python -m compileall -q src tests
+          python -m compileall -q src tests scripts
           PYTHONPATH=src python -m unittest discover -s tests -v
-      - name: Controlled native terminal callback mapping
+      - name: Terminal callbacks, privileged perception audit, production isolation
         run: bash scripts/test-native-events.sh
+      - name: Sanitizers on death, long stall and exploration
+        run: bash scripts/test-native-sanitizers.sh
+      - name: Upstream seed catalog against normalized fixture
+        run: python scripts/compare-seed-catalog.py
