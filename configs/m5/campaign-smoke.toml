@@ -1,0 +1,37 @@
+# Same contract as campaign-exploration.toml, scaled to under a minute.
+[train]
+experiment = "EXP-0034"
+algorithm = "linear_td_v2"
+task = "exploration_v2_floor"
+budget = 250
+encoder = "rel_v3"
+disabled = ["frontier"]
+init = "data/m5/bc/scaled-rel_no_planner-r1.json"
+reward = "cells_v2"
+master_seed = 20261103
+run = 90
+episodes = 8
+alpha = 0.02
+gamma = 0.95
+epsilon_start = 0.1
+epsilon_end = 0.02
+epsilon_decay_episodes = 8
+validation_every = 4
+validation_episodes = 4
+checkpoint_every = 2
+periodic_checkpoint_every = 4
+keep_periodic = 2
+validation_baseline = "data/m5/validation-baseline-random.json"
+
+[limits]
+cpu_cores = 2
+nice = 5
+memory_mb = 512
+max_rss_mb = 1024
+max_seconds = 120
+episode_seconds = 60.0
+validation_workers = 2
+
+[stop]
+patience_validations = 4
+min_delta = 10.0

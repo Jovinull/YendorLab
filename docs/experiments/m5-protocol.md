@@ -123,7 +123,22 @@ Validation comparisons are exploratory and carry no significance claim. On the f
 
 ## Final evaluation
 
-Fixed before the final set is touched, in the frozen section that follows selection.
+**Frozen on 2026-11-03, before any `final` seed was evaluated.** Budget 250 decisions, first 100 `final` seeds, `scripts/m5-suite.py`, the code path already rehearsed on diagnostic seeds (EXP-0033). Exclusion: only `PREROLL_UNAVAILABLE` seeds on the relay, which apply to every policy alike. Operational failures follow the failure policy above.
+
+Selection, made on validation only:
+
+| Role | Policy | Why | Checkpoint SHA-256 |
+|---|---|---|---|
+| P1 `bc_planner_r2` | Linear BC on `rel_v3` | Highest validation mean of all methods (970.5) | `afd591d742f4ca61d8f58e14a94d3a874b196f238baa4f0a7bbb081bb0979c8e` |
+| P2 `warm_no_planner_r1` | BC then TD on `rel_v3` without the planner signal | Highest validation mean among policies that do not read a planner (589.0) | `da844ae6e7da42b4167cf4b973d91013635f5757726ff50a2a6ec89892fdd8f4` |
+
+Direction priors for the control come from each policy's action shares on diagnostic seeds: `data/m5/priors.json`, SHA-256 `33f67182dab4b6b94b89ca9dff3173881a7b75c6a2ca5c3f09dc05d0c053b96e`. The best fixed direction was chosen on validation: north, `fixed_k`.
+
+**Primary family, Holm-adjusted, ten comparisons.** For P1 and for P2, on the floor task: against random, `fixed_k` and its own direction prior. On the relay task: against random and `fixed_k`. A comparison succeeds when its paired 95% bootstrap interval lies above zero and its Holm-adjusted sign-flip p is below 0.05.
+
+**Gate E decision rule.** Learning evidence for a policy requires all five of its comparisons to succeed. P1 carries the planner signal, so success shows a learned policy reproduces planner behavior, not independent navigation. Only P2 can support a claim about navigation without a planner, and only within depths 1 and 2.
+
+Descriptive, not in the family: each policy against `frontier_moves_v2`, all three runs of each method, M4 policies, the multilevel task and the full-action reference. If methodology changes after seeing these results, a new protocol version and a new final set are required.
 
 ## Threats to validity
 
@@ -131,4 +146,6 @@ Selection on 40 validation seeds. Three training runs. The planner feature embed
 
 ## Protocol changes
 
+- 2026-11-03, all pilots rerun. The first flush fix (`patch 3 draft`) corrupted the recording position when a prompt was declined after a flush, and the child hung. The failure policy caught it; those campaigns are archived in ignored `data/m5/invalidated-flush-bug/` and contributed no reported number. They did reveal that `rel_v3` was promising before the hyperparameter scan was planned, so that scan is not blind.
+- 2026-11-03, additions decided after seeing validation data and therefore exploratory: a four-setting hyperparameter scan (EXP-0027), the tiny MLP capacity test (EXP-0028b), and a 400-episode second stage (EXP-0032). The final family above was set after all of them.
 - 2026-11-03, budget fixed by the rule (EXP-0025, 32 diagnostic seeds): `frontier_moves_v2` reached 1,163.2 cells at 1,000 decisions and 961.4 at 250, the first multiple of 50 above 80%. **The budget of `exploration_v2_floor` and `exploration_v2_relay` is 250 decisions.**
