@@ -15,6 +15,9 @@ from .evaluation import run_policy_episode, seed_for, summarize
 from .experiments import list_runs, record, show_run
 from .training import load_policy_checkpoint, train
 from .skill import LinearFrontierAgent, load_skill_checkpoint, train_skill
+from .benchmark import M5_MASTER, evaluate as evaluate_task, seed_pairs
+from .campaign import Campaign, load_config, status as campaign_status
+from .tasks import task_named
 
 
 def agent_named(name, seed, checkpoint=None):
@@ -82,6 +85,15 @@ def main():
     training.add_argument("--total-seconds", type=float)
     training.add_argument("--master-seed", type=int)
     training.add_argument("--resume", action="store_true")
+    campaign = sub.add_parser("campaign")
+    campaign.add_argument("operation", choices=["start", "resume", "status", "stop", "evaluate"])
+    campaign.add_argument("--directory", type=Path, required=True)
+    campaign.add_argument("--config", type=Path)
+    campaign.add_argument("--binary", type=Path, default=Path(".local/BrogueCE/bin/brogue"))
+    campaign.add_argument("--checkpoint", default="best", choices=["best", "latest"])
+    campaign.add_argument("--split", default="validation", choices=["validation", "diagnostic", "final"])
+    campaign.add_argument("--episodes", type=int, default=40)
+    campaign.add_argument("--workers", type=int, default=1)
     experiments = sub.add_parser("experiments")
     experiments.add_argument("operation", choices=["list", "show"])
     experiments.add_argument("run_id", nargs="?")
@@ -105,6 +117,13 @@ def main():
                 parser.error("show requires run_id")
             print(json.dumps(show_run(args.data_dir, args.run_id)))
         return
+    if args.command == "campaign" and args.operation in {"status", "stop"}:
+        if args.operation == "stop":
+            (args.directory / "STOP").write_text("")
+            print(json.dumps({"stop_requested": str(args.directory)}))
+        else:
+            print(json.dumps(campaign_status(args.directory), indent=1))
+        return
     binary = args.binary.resolve()
     if not binary.is_file():
         parser.error(f"missing native binary: {binary}; run bash scripts/build-wsl.sh")
@@ -113,6 +132,27 @@ def main():
             parser.error("event, time, progress and memory limits must be positive")
         if args.command in {"evaluate", "benchmark"} and args.episodes < 1:
             parser.error("episodes must be positive")
+
+    if args.command == "campaign":
+        if args.operation == "evaluate":
+            manifest = json.loads((args.directory / "manifest.json").read_text())
+            settings = manifest["identity"]["config"]["train"]
+            checkpoint = args.directory / f"checkpoints/{args.checkpoint}.json"
+            spec = {"kind": "linear", "encoder": settings["encoder"],
+                    "disabled": settings.get("disabled", []), "checkpoint": str(checkpoint)}
+            result = evaluate_task(binary, spec, task_named(settings["task"], settings["budget"]),
+                                   seed_pairs(M5_MASTER, args.split, args.episodes), args.workers)
+            print(json.dumps(result["summary"], indent=1))
+            return
+        if args.operation == "start" and args.config is None:
+            parser.error("campaign start requires --config")
+        config = load_config(args.config or args.directory / "campaign.toml")
+        if args.operation == "start":
+            args.directory.mkdir(parents=True, exist_ok=True)
+            (args.directory / "campaign.toml").write_text(args.config.read_text())
+        outcome = Campaign(config, args.directory, binary).run(resume=args.operation == "resume")
+        print(json.dumps(outcome))
+        return
 
     if args.command == "train":
         config = tomllib.loads(args.config.read_text())["train"]

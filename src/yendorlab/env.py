@@ -160,7 +160,7 @@ class BrogueEnv:
         self.stderr_file = tempfile.TemporaryFile(dir=self.workdir)
         self.process = subprocess.Popen(command, cwd=self.workdir, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=self.stderr_file,
-                                        bufsize=0)
+                                        bufsize=0, start_new_session=True)
         try:
             memory_bytes = self.memory_mb * 1024 * 1024
             resource.prlimit(self.process.pid, resource.RLIMIT_AS, (memory_bytes, memory_bytes))
