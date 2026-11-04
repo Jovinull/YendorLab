@@ -239,9 +239,6 @@ def assess(args):
 
 
 def launch(args):
-
-
-def launch(args):
     """Run a list of campaign configs with a bounded number of concurrent processes."""
     configs = [Path(path) for path in args.configs]
     active, started = [], time.monotonic()
