@@ -9,3 +9,9 @@
 - Limits: one runner worker, two build jobs, 30 seconds and at most 100 actions per episode in initial measurements. The current CLI defaults to a 512 MiB Linux address-space cap per native child (`--memory-mb`). `Ctrl+C` and wall/action limits stop runs; children are terminated in `finally`.
 
 Upstream has `test/run_regression_tests.py` and `test/compare_seed_catalog.py`. The catalog comparator was run and failed because of the Windows checkout's CRLF fixture and an older version header; normalized catalog bodies matched. The recording regression runner had no included recordings. Our four tests ran; see [M0 results](../results/m0.md).
+
+## Operating mode since M5
+
+Git, sources and records stay in the Windows checkout at `/mnt/c`. The native binary runs from a hash-named copy on the Linux filesystem, and game directories live in `/dev/shm` (3.8 GiB here) or `$YENDORLAB_RUNTIME_DIR`. `bin/` under `.local/BrogueCE` keeps 617 old `LastGame` files from M0–M4; they are ignored and no longer touched by runs. Measured capacity and limits are in [M5 results](../results/m5.md#8-cpu). Detached runs use `setsid nohup`; one survived 75 s with no WSL session open. A Windows sleep or reboot stops them, and `campaign resume` continues.
+
+Tests needing WSL or a manual run: `scripts/soak-native.py`, `scripts/bench-m5.py`, `scripts/check-gym.py` (needs the Gymnasium venv) and all training.

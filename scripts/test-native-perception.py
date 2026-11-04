@@ -6,6 +6,7 @@ scenario flag nor the truth writer (asserted by scripts/test-native-events.sh).
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -18,8 +19,10 @@ SEEDS = range(1, 41)
 
 
 def truth_lines(env):
-    env.stderr_file.seek(0)
-    complete = env.stderr_file.read().split(b"\n")[:-1]  # The last line may be in flight.
+    # The child shares this file offset, so a seek here would redirect its next write.
+    descriptor = env.stderr_file.fileno()
+    data = os.pread(descriptor, os.fstat(descriptor).st_size, 0)
+    complete = data.split(b"\n")[:-1]  # The last line may be in flight.
     other = [line for line in complete if not line.startswith(b'{"decision"')]
     if other:
         print("non-truth stderr:", other[:3], file=sys.stderr)

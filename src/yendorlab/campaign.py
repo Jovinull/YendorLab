@@ -60,8 +60,9 @@ def load_config(path: Path):
 
 def fixed_identity(config, binary):
     """What must not change across a resume."""
+    start = config["train"].get("init")
     return {"binary_sha256": file_sha256(binary), "source_tree_sha256": source_fingerprint(),
-            "protocol": PROTOCOL, "observation_schema": OBSERVATION_SCHEMA,
+            "init_sha256": file_sha256(start) if start else None, "protocol": PROTOCOL, "observation_schema": OBSERVATION_SCHEMA,
             "action_schema": ACTION_SCHEMA,
             "config": {section: {k: v for k, v in values.items() if k != "episodes"}
                        for section, values in config.items() if section != "limits"}}

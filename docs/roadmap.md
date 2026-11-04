@@ -1,17 +1,29 @@
-# Roadmap (updated 2026-10-30)
+# Roadmap (updated 2026-11-03)
 
-- **M4 narrow learning demonstrated:** two independent 30-episode linear policies improved raw discovered-cell counts over their zero-weight initial policy on 16 held-out seeds, with descriptive paired intervals above zero. A fixed-north control explains some, but not all, of the gain; the manual heuristic remains much stronger. See [M4 results](results/m4.md).
-- **Next gate:** replicate with a clean committed revision and larger preregistered seed set, then add robust contextual item/target actions and perception audits. Profile startup from Linux filesystem and decide whether to stage the native binary there. Do not infer Bullet/Rapid/Classic campaign readiness from this task.
+## Current state
 
-- **M1 partial:** protocol v2, context, terrain, inventory, canonical terminal callbacks, real death and quit tests. Live victory and full contextual action/visibility audit remain.
-- **M2 partial:** bounded environment API, seed domains, reward schemes, evaluation, heuristic baseline, SQLite and CPU benchmarks. Gymnasium validator was not run; baseline quality is limited.
-- **M3 initial training pipeline operational:** real Brogue Q updates, atomic checkpoints, inference loading, episode-boundary resume and held-out evaluation. No demonstrated game improvement. See [M1–M3 results](results/m1-m3.md).
-- **Next:** audit target and item workflows and special perception, find a valid victory recording or live route, improve heuristic, then compare learned policies under a frozen protocol. Full-game training and specialist status remain future work.
+**M5 complete.** Decision: exploration `CONDITIONAL_GO`, navigation `NO_GO`, full game `NO_GO`. See [M5 results](results/m5.md).
 
-## Historical M0 roadmap
+- Environment certified for the exploration scope: protocol 3, privileged perception audit, transport stress, soak, sanitizers.
+- `exploration_v2` benchmark frozen, with controls, relay probe and separate seed domains. First 100 final seeds are spent.
+- Deployed skill: linear behavior cloning on `rel_v3`, equal to the eight-move planner. It is a learned wrapper of a planner, not independent navigation.
+- Learned line without planner: 583 cells on final seeds against 240 for random and 985 for the planner. More RL did not improve it within 400 episodes.
+- Campaign infrastructure tested for crash, stop and resume. A long campaign is prepared and **not launched**; it needs approval.
 
-- **M0 Foundation: partial.** Real headless input and restricted observation work; build and bounded runner work. Official upstream regression tests, full terminal coverage, formal leak tests, and benchmark comparison remain open.
-- **M1 Playable environment:** design menu/context-aware actions, inventory and terrain observation with visibility audit, natural end detection tests, reset contract, and Gymnasium-compatible wrapper if measured useful.
-- **M2 Baseline laboratory:** legal random and interpretable navigation agents, held-out seed protocol, robust metrics, latency and memory benchmarks, paired comparisons.
-- **M3 First learning agent:** select a compact task and compare tabular/value, evolutionary and policy methods under equal CPU budgets. Do not commit to PPO before evidence.
-- Later M4–M7: curriculum across Bullet/Rapid/Classic, stronger agents, public benchmark, scientific results, subject to measured progress.
+## Next
+
+1. Diagnose linear TD instability on validation seeds.
+2. Define `navigation_v1`: reach known stairs, with its own controls.
+3. Add HP and status to the observation and a survival signal.
+4. Item and target contracts, then a separate Bullet Brogue environment.
+
+Remaining game-contract gaps: throwing, device targeting, nested item prompts, status effects, a live victory. Full-game training stays out of scope until they close.
+
+## Milestone history
+
+- **M0 Foundation:** real headless input and restricted observation.
+- **M1 Playable environment, partial:** protocol 2, context, terrain, inventory, canonical terminal callbacks.
+- **M2 Baseline laboratory, partial:** bounded API, seed domains, rewards, heuristic, SQLite, CPU benchmarks.
+- **M3 First learning pipeline:** real Q updates, checkpoints, resume. No demonstrated improvement.
+- **M4 Narrow pilot:** two 30-episode linear policies improved on their zero-weight start. M5 showed that start was a fixed direction and that exposure was unequal: on a fair budget M4 policies are not distinguishable from random. See [M5 results](results/m5.md#2-audit-of-the-m4-benchmark).
+- **M5 Hardening and bakeoff:** above.

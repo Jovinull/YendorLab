@@ -146,6 +146,6 @@ Selection on 40 validation seeds. Three training runs. The planner feature embed
 
 ## Protocol changes
 
-- 2026-11-03, all pilots rerun. The first flush fix (`patch 3 draft`) corrupted the recording position when a prompt was declined after a flush, and the child hung. The failure policy caught it; those campaigns are archived in ignored `data/m5/invalidated-flush-bug/` and contributed no reported number. They did reveal that `rel_v3` was promising before the hyperparameter scan was planned, so that scan is not blind.
+- 2026-11-03, all pilots rerun. The first version of the recording flush corrupted the recording position when a prompt was declined after a flush, and the child hung. The failure policy caught it; those campaigns are archived in ignored `data/m5/invalidated-flush-bug/` and contributed no reported number. They did reveal that `rel_v3` was promising before the hyperparameter scan was planned, so that scan is not blind.
 - 2026-11-03, additions decided after seeing validation data and therefore exploratory: a four-setting hyperparameter scan (EXP-0027), the tiny MLP capacity test (EXP-0028b), and a 400-episode second stage (EXP-0032). The final family above was set after all of them.
 - 2026-11-03, budget fixed by the rule (EXP-0025, 32 diagnostic seeds): `frontier_moves_v2` reached 1,163.2 cells at 1,000 decisions and 961.4 at 250, the first multiple of 50 above 80%. **The budget of `exploration_v2_floor` and `exploration_v2_relay` is 250 decisions.**

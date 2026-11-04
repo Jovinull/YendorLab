@@ -1,6 +1,6 @@
 # ADR 0003: Event steps and a linear exploration skill
 
-Status: provisional, 2026-10-30. Extends [ADR 0002](0002-learning-pipeline.md).
+Status: provisional, 2026-10-30. Extends [ADR 0002](0002-learning-pipeline.md). Amended by [ADR 0004](0004-m5-benchmark.md), which replaces the task and encoder.
 
 The native one-event `step` remains the canonical audit interface. A logical action could combine item selection, confirmation and target input, but it would need to pause when new player-visible information changes the choice. The present event contract is slower and exposes more bookkeeping, but preserves exact turn and prompt accounting. An optional Gymnasium adapter combines only movement with deterministic, safe prompt acknowledgments for the bounded exploration task; it reports native event and game-turn deltas. It does not replace the raw protocol or claim a complete action API.
 

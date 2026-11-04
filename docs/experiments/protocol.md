@@ -11,3 +11,12 @@ All M0 runs use Brogue CE v1.15.1, Classic, Normal, WSL2, one worker, random mov
 | EXP-0005 | Worker scaling? | 1 vs 2 workers | Deferred: per-step/menu semantics and natural termination need validation before worker comparison |
 
 An episode is completed only on a native terminal event. The action cap/time cap yields truncation and cannot enter win/death denominators as a finished game. Measurements include process startup and Python pipe parsing. No confidence interval is calculated from zero completed games. See [results](../results/m0.md).
+
+## Later experiments
+
+| IDs | Protocol | Results |
+|---|---|---|
+| EXP-0006–0013 | [M1–M3 evidence](../results/m1-m3.md) | same |
+| EXP-0014–0021 | [M4 exploration](m4-exploration.md) | [M4](../results/m4.md) |
+| EXP-0022 | Replay of M4-A after hardening | [M5](../results/m5.md) |
+| EXP-0023–0036 | [M5 protocol](m5-protocol.md): 0023 M4 audit, 0024 anisotropy, 0025 budget, 0026 controls, 0027 TD, 0028 imitation, 0028b capacity, 0029 warm start, 0030 ablations, 0031 CPU, 0032 second stage, 0033 diagnostic suite, 0034 campaign smoke, 0036 final. 0035 is the prepared campaign, not run | [M5](../results/m5.md), [summary](../results/m5-summary.json) |

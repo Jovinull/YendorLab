@@ -1,5 +1,15 @@
 # Scientific diary
 
+## 2026-11-03 — M5 hardening and bakeoff
+
+Goal: decide whether a long campaign is justified. We expected to tune a learner. Most of the value came from the audit. Replaying M4 with exposure accounting showed its reference policy always pressed west and that episodes ended at very different turn counts. The north preference traced to geometry: depth 1 starts at the bottom of the map. A fair fixed-decision task removed the M4 gain over random. Building the depth 2 relay gave a probe where direction preference has no support.
+
+A surprise: the slow resets blamed on the mounted binary in M4 mostly came from hundreds of leftover recording files in the native working directory. Another: long stalls overflowed the upstream recording buffer into our JSON channel. The first fix was wrong. Flushing during a prompt let a declined move underflow the buffer position, and the child wrote gigabytes until the episode guard fired. Sanitizers and unit tests had passed. The failure policy written earlier that day caught it during pilots: logged, retried, stopped, no weights committed. All pilots were discarded and rerun, and the sequence became a test.
+
+Expected TD to be the main story. Imitation won easily, and the weights showed why: the policy restates the planner feature. RL then made that policy worse. It learned to run from monsters, unlike the teacher. Without the planner signal the picture reversed: RL added a little, and a policy with local features and memory beat all controls, also on depth 2. An MLP did not help where linear looked underfit. DAgger did not help despite clear covariate shift, and we do not know why. Training longer did not help within 400 episodes.
+
+Decision: conditional go for exploration as a bounded investigation, no go for navigation and the full game. The biggest open question is why TD destabilizes. See [results](../results/m5.md).
+
 ## 2026-10-30 — M4 exploration pilot
 
 We sought a measurable learned skill before attempting full Brogue. Chose new-cell exploration because it has direct objective feedback and cheap bounded episodes; stair navigation and survival need longer or more confounded horizons. The old tabular state omitted route and visit history. A 16-weight action-value model trained on real Brogue for two 30-episode runs. Both improved discovered-cell counts against their zero-weight initial policy on 16 held-out seeds, but neither approached the manual heuristic. A post-hoc fixed-north control showed that much of the policy is a directional preference; additional learned action changes reduced stalling on separate diagnostic seeds. The first final evaluation attempt for model A failed during reset and was rerun identically after diagnostic error handling was added. Gymnasium `check_env` passed for a movement-only wrapper after excluding nondeterministic RSS from `info`. ASan/UBSan passed a real death path. The strongest measured engineering bottleneck was repeated process startup from `/mnt/c`, not linear inference. Next: replicate with clean-revision source hashes, audit special perception and contextual actions, and design a more challenging navigation task.

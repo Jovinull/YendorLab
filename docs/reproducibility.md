@@ -1,4 +1,38 @@
-# Reproducibility (M0 history and current additions)
+# Reproducibility
+
+## Current (M5)
+
+Build and test as in the [README](../README.md). Native source is fixed at `1ba4240b7a928ddf0ffb772717bf1d433cd63804`; patch SHA-256 is `c4b48852ea2f9a6c386ad03347c326d84989141a21f94746d8bda3d27f9c04a8`; protocol 3, observation schema 3, action schema 2. Production binary SHA-256 on this toolchain: `13dc15d40f6b1d2446e2f18c3522c2fe8f610d862ec946f05aa45dd501fb07f6`.
+
+`scripts/build-wsl.sh` rebuilds from the tracked patch whenever its hash changes, so a stale patch cannot be built. `scripts/stage-linux.sh` copies the binary to a hash-named Linux path. Every run records revision, `worktree_dirty`, source tree hash, patch hash and binary hash. The source hash is independent of cwd and line endings; hashes recorded before M5 used raw bytes and remain only historical identifiers.
+
+Each episode has `trace_sha256` over every native line and action. Replay with the same binary, seed and policy RNG is exact. Campaign weights are deterministic per episode index, so crash resume reproduces an uninterrupted run on the same build and platform unless a timing limit fires. Cross-platform determinism is unproven.
+
+M5 experiments:
+
+```bash
+L=$(bash scripts/stage-linux.sh); export PYTHONPATH=src
+python3 scripts/m5-experiments.py --binary "$L" m4audit
+python3 scripts/m5-experiments.py --binary "$L" anisotropy
+python3 scripts/m5-experiments.py --binary "$L" budget
+python3 scripts/m5-experiments.py --binary "$L" controls --budget 250
+python3 scripts/m5-experiments.py pilot td
+python3 scripts/m5-experiments.py --binary "$L" launch --parallel 6 data/m5/configs/td-*.toml
+for run in 0 1 2; do python3 scripts/m5-imitation.py --binary "$L" --run $run; done
+python3 scripts/m5-experiments.py pilot hp; python3 scripts/m5-experiments.py pilot ablation
+python3 scripts/m5-experiments.py pilot warm; python3 scripts/m5-experiments.py pilot stage2
+python3 scripts/m5-experiments.py --binary "$L" launch --parallel 6 data/m5/configs/hp-*.toml data/m5/configs/abl-*.toml data/m5/configs/warm-*.toml data/m5/configs/stage2-*.toml
+python3 scripts/m5-experiments.py --binary "$L" assess td- hp- abl- warm- stage2-
+for run in 0 1 2; do python3 scripts/m5-capacity.py --binary "$L" --run $run; done
+python3 scripts/bench-m5.py --linux "$L"
+python3 scripts/soak-native.py --binary "$L"
+python3 scripts/m5-suite.py --binary "$L" --split diagnostic --count 64 --experiment EXP-0033
+python3 scripts/m5-summary.py
+```
+
+Do not rerun `m5-suite.py --split final` on the first 100 seeds as a new test: they are spent, and a rerun is a reproduction only. Campaign runs before the SQLite integration are recorded by manifest and journal under `data/m5/campaigns`, listed in [m5-summary.json](results/m5-summary.json). Invalidated pilots are in `data/m5/invalidated-flush-bug/`.
+
+## History (M0–M4)
 
 For the current CLI use Python 3.11+ in WSL. Run `bash scripts/build-wsl.sh`, `PYTHONPATH=src python3 -m unittest discover -s tests -v`, `bash scripts/test-native-events.sh`, then the bounded commands in [README](../README.md). The native source is fixed at `1ba4240b7a928ddf0ffb772717bf1d433cd63804`; protocol, observation and action schemas are 2, and the Q encoder is 1. The controlled native callback script temporarily builds a test binary and restores production afterward.
 

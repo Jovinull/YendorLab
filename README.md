@@ -1,43 +1,63 @@
 # YendorLab
 
-YendorLab is an open source, CPU focused research laboratory for agents that learn to play Brogue: Community Edition. The agent project is named **Maia**. A bounded tabular Q-learning pipeline now trains from real headless Brogue games. It supports an initial exploration task, not a full-game specialist.
+YendorLab is an open source, CPU focused research laboratory for agents that learn to play Brogue: Community Edition. The agent is named **Maia**.
 
-## Reproduce the current demonstration
+**Current state.** Maia can explore the first floors of Brogue on unseen seeds, moving only. Its deployed skill is a linear policy cloned from a hand-written planner, and it matches that planner. A separate learned policy without planner input beats random and direction controls by a wide margin and stays well below the planner. Navigation to a goal and the full game are not supported. See [M5 results](docs/results/m5.md) and the [roadmap](docs/roadmap.md).
 
-On Windows 11 with WSL2 Ubuntu, from this repository root:
+## Setup
+
+On Windows 11 with WSL2 Ubuntu and Python 3.11+, inside WSL at `/mnt/c/Workspace/YendorLab`:
 
 ```bash
 bash scripts/build-wsl.sh
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-PYTHONPATH=src python3 -m yendorlab.cli --experiment EXP-0004 --episodes 2 --max-actions 50 --max-seconds 15 --seed 123
+bash scripts/test-native-events.sh
+bash scripts/test-native-sanitizers.sh
 ```
 
-Run these commands **inside WSL** at `/mnt/c/Workspace/YendorLab`. The build pins Brogue CE `v1.15.1` to commit `1ba4240b7a928ddf0ffb772717bf1d433cd63804` and applies [one source patch](native/patches/0001-yendorlab-stream.patch). Build output and SQLite history are ignored under `.local/` and `data/`. The command prints JSON; `completed` counts only natural game endings. `Ctrl+C` interrupts the runner, which records only episodes actually started and marks incomplete ones as truncations.
-
-The M0 command above is retained for reproduction. The current operational CLI (Python 3.11+) is:
+The build pins Brogue CE `v1.15.1` at `1ba4240b7a928ddf0ffb772717bf1d433cd63804` and applies [one patch](native/patches/0001-yendorlab-stream.patch). Python needs only its standard library. For training and long evaluation, stage the binary on the Linux filesystem, under a path named by its hash:
 
 ```bash
-PYTHONPATH=src python3 -m yendorlab.app doctor
-PYTHONPATH=src python3 -m yendorlab.app play --agent heuristic --seed 123
-PYTHONPATH=src python3 -m yendorlab.app train --config configs/train-smoke.toml
-PYTHONPATH=src python3 -m yendorlab.app evaluate --agent q --checkpoint data/checkpoints/maia-q-inference.json --episodes 3 --split validation --reward exploration_v1
-PYTHONPATH=src python3 -m yendorlab.app benchmark --episodes 4 --max-events 150 --workers 1
-PYTHONPATH=src python3 -m yendorlab.app experiments list
-PYTHONPATH=src python3 -m yendorlab.app train --config configs/train-smoke.toml --episodes 6 --resume
+L=$(bash scripts/stage-linux.sh)
 ```
 
-M4 exploration training and evaluation, bounded to one CPU worker:
+## Using Maia
 
 ```bash
-PYTHONPATH=src python3 -m yendorlab.app train --config configs/train-exploration.toml --checkpoint data/checkpoints/m4-linear-a.json
-PYTHONPATH=src python3 -m yendorlab.app evaluate --agent linear --checkpoint data/checkpoints/m4-linear-a-inference.json --episodes 16 --master-seed 20261031 --split final --max-events 120 --max-seconds 8 --max-no-progress 30 --experiment EXP-0020
-python3 scripts/analyze-m4.py 4d9ebb6d-af70-48aa-af67-51b9044b59f1 32ca48ed-834c-4dcc-a727-a05cd55514a7
+export PYTHONPATH=src
+python3 -m yendorlab.app doctor
+python3 scripts/m5-suite.py --binary "$L" --split diagnostic --count 64 --experiment EXP-LOCAL
+python3 -m yendorlab.app experiments list
 ```
 
-The final seed split above was used for the frozen M4 pilot; reuse it only to reproduce that pilot, not to tune a new policy. The task, results and limitations are in [M4 protocol](docs/experiments/m4-exploration.md) and [M4 results](docs/results/m4.md). The optional Gymnasium adapter can be checked in an isolated environment with `PYTHONPATH=src .local/gym-venv/bin/python scripts/check-gym.py` after installing the `gym` extra; it is not required for training.
+Selected policies, seeds and the frozen protocol are in the [M5 protocol](docs/experiments/m5-protocol.md). Checkpoints live in ignored `data/`; their hashes are in the protocol.
 
-Resume occurs only at an episode boundary; increase the episode target while keeping other settings fixed. Reserve `--split final` for a frozen protocol. Local SQLite history and checkpoints remain ignored in `data/`. See the [current contract](docs/architecture/initial-interface.md), [M1–M3 results](docs/results/m1-m3.md), and [roadmap](docs/roadmap.md).
+## Training
+
+Campaigns are bounded, journaled and resumable. A smoke run takes seconds:
+
+```bash
+python3 -m yendorlab.app campaign start --config configs/m5/campaign-smoke.toml --directory data/smoke --binary "$L"
+python3 -m yendorlab.app campaign status --directory data/smoke
+```
+
+`campaign stop` ends a run at the next episode boundary; `campaign resume` continues it and refuses a changed binary, source tree or configuration. The prepared long campaign and its commands are in [M5 results](docs/results/m5.md#14-prepared-campaign-not-launched). It has not been launched.
+
+## Documentation
+
+| Topic | File |
+|---|---|
+| Interface contract | [docs/architecture/initial-interface.md](docs/architecture/initial-interface.md) |
+| Current benchmark protocol | [docs/experiments/m5-protocol.md](docs/experiments/m5-protocol.md) |
+| Latest results and readiness | [docs/results/m5.md](docs/results/m5.md) |
+| Decisions | [docs/decisions/](docs/decisions/) |
+| Reproducing results | [docs/reproducibility.md](docs/reproducibility.md) |
+| Scientific diary | [docs/research/diary.md](docs/research/diary.md) |
+
+Earlier milestones are kept as written: [M0](docs/results/m0.md), [M1–M3](docs/results/m1-m3.md), [M4](docs/results/m4.md). The M4 commands still run, on the same seeds, for reproduction only. M5 explains which of its conclusions no longer hold.
+
+CI runs the build, unit and integration tests, the perception audit, sanitizers and the seed catalog check. It does not run training and is not a scientific certification. WSL is needed only for local development; the Gymnasium check (`scripts/check-gym.py`) and the soak and benchmark scripts run manually.
 
 ## Project policy
 
-The repository code and Brogue patch are offered under AGPL-3.0-or-later; see [LICENSE](LICENSE). Brogue CE authorship and upstream notices remain in the pinned upstream source. No Brogue CE or BrogueBot source is vendored here. Local raw data, replays, binaries, and checkpoints remain outside Git. Public research results require archived raw data and checksums before deletion.
+The repository code and Brogue patch are offered under AGPL-3.0-or-later; see [LICENSE](LICENSE). Brogue CE authorship and upstream notices remain in the pinned upstream source. No Brogue CE or BrogueBot source is vendored here. Local raw data, replays, binaries and checkpoints remain outside Git. Public research results require archived raw data and checksums before deletion.

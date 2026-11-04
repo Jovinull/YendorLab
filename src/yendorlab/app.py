@@ -150,8 +150,12 @@ def main():
         if args.operation == "start":
             args.directory.mkdir(parents=True, exist_ok=True)
             (args.directory / "campaign.toml").write_text(args.config.read_text())
+        if args.operation == "resume":
+            (args.directory / "STOP").unlink(missing_ok=True)
         outcome = Campaign(config, args.directory, binary).run(resume=args.operation == "resume")
-        print(json.dumps(outcome))
+        run_id = record(Path("data"), config["train"]["experiment"],
+                        {**config, "directory": str(args.directory)}, outcome, binary)
+        print(json.dumps({"run_id": run_id, **outcome}))
         return
 
     if args.command == "train":
